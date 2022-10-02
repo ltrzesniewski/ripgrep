@@ -1,6 +1,7 @@
 use std::io;
 
 use termcolor;
+use termcolor::HyperlinkSpec;
 
 use crate::is_tty_stdout;
 
@@ -108,6 +109,16 @@ impl termcolor::WriteColor for StandardStream {
         match self.0 {
             LineBuffered(ref mut w) => w.set_color(spec),
             BlockBuffered(ref mut w) => w.set_color(spec),
+        }
+    }
+
+    #[inline]
+    fn set_hyperlink(&mut self, link: &HyperlinkSpec) -> io::Result<()> {
+        use self::StandardStreamKind::*;
+
+        match self.0 {
+            LineBuffered(ref mut w) => w.set_hyperlink(link),
+            BlockBuffered(ref mut w) => w.set_hyperlink(link),
         }
     }
 

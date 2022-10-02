@@ -11,7 +11,7 @@ use grep_searcher::{
     LineStep, Searcher, Sink, SinkContext, SinkContextKind, SinkFinish,
     SinkMatch,
 };
-use termcolor::{ColorSpec, NoColor, WriteColor};
+use termcolor::{ColorSpec, HyperlinkSpec, NoColor, WriteColor};
 
 use crate::color::ColorSpecs;
 use crate::counter::CounterWriter;
@@ -1386,7 +1386,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     /// terminator.)
     fn write_path_line(&self) -> io::Result<()> {
         if let Some(path) = self.path() {
-            self.write_spec(self.config().colors.path(), path.as_bytes())?;
+            self.write_path(path)?;
             if let Some(term) = self.config().path_terminator {
                 self.write(&[term])?;
             } else {
@@ -1402,7 +1402,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     /// the field separator.)
     fn write_path_field(&self, field_separator: &[u8]) -> io::Result<()> {
         if let Some(path) = self.path() {
-            self.write_spec(self.config().colors.path(), path.as_bytes())?;
+            self.write_path(path)?;
             if let Some(term) = self.config().path_terminator {
                 self.write(&[term])?;
             } else {
@@ -1438,7 +1438,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         let bin = self.searcher.binary_detection();
         if let Some(byte) = bin.quit_byte() {
             if let Some(path) = self.path() {
-                self.write_spec(self.config().colors.path(), path.as_bytes())?;
+                self.write_path(path)?;
                 self.write(b": ")?;
             }
             let remainder = format!(
@@ -1450,7 +1450,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
             self.write(remainder.as_bytes())?;
         } else if let Some(byte) = bin.convert_byte() {
             if let Some(path) = self.path() {
-                self.write_spec(self.config().colors.path(), path.as_bytes())?;
+                self.write_path(path)?;
                 self.write(b": ")?;
             }
             let remainder = format!(
@@ -1512,6 +1512,24 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         let mut wtr = self.wtr().borrow_mut();
         wtr.set_color(spec)?;
         wtr.write_all(buf)?;
+        wtr.reset()?;
+        Ok(())
+    }
+
+    fn write_path(&self, path: &PrinterPath) -> io::Result<()> {
+        let mut wtr = self.wtr().borrow_mut();
+        wtr.set_color(self.config().colors.path())?;
+
+        if let Some(link) =
+            if wtr.supports_color() { path.hyperlink() } else { None }
+        {
+            wtr.set_hyperlink(&HyperlinkSpec::new(link))?;
+            wtr.write_all(path.as_bytes())?;
+            wtr.set_hyperlink(&HyperlinkSpec::default())?;
+        } else {
+            wtr.write_all(path.as_bytes())?;
+        }
+
         wtr.reset()?;
         Ok(())
     }

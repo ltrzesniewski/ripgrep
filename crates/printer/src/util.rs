@@ -1,10 +1,11 @@
+use once_cell::unsync::OnceCell;
 use std::borrow::Cow;
 use std::fmt;
 use std::io;
 use std::path::Path;
 use std::time;
 
-use bstr::{ByteSlice, ByteVec};
+use bstr::{BString, ByteSlice, ByteVec};
 use grep_matcher::{Captures, LineTerminator, Match, Matcher};
 use grep_searcher::{
     LineIter, Searcher, SinkContext, SinkContextKind, SinkError, SinkMatch,
@@ -276,12 +277,20 @@ impl<'a> Sunk<'a> {
 /// portability with a small cost: on Windows, paths that are not valid UTF-16
 /// will not roundtrip correctly.
 #[derive(Clone, Debug)]
-pub struct PrinterPath<'a>(Cow<'a, [u8]>);
+pub struct PrinterPath<'a> {
+    path: &'a Path,
+    bytes: Cow<'a, [u8]>,
+    hyperlink: OnceCell<Option<BString>>,
+}
 
 impl<'a> PrinterPath<'a> {
     /// Create a new path suitable for printing.
     pub fn new(path: &'a Path) -> PrinterPath<'a> {
-        PrinterPath(Vec::from_path_lossy(path))
+        PrinterPath {
+            path,
+            bytes: Vec::from_path_lossy(path),
+            hyperlink: OnceCell::new(),
+        }
     }
 
     /// Create a new printer path from the given path which can be efficiently
@@ -303,7 +312,7 @@ impl<'a> PrinterPath<'a> {
     /// environments, only `/` is treated as a path separator.
     fn replace_separator(&mut self, new_sep: u8) {
         let transformed_path: Vec<u8> = self
-            .0
+            .bytes
             .bytes()
             .map(|b| {
                 if b == b'/' || (cfg!(windows) && b == b'\\') {
@@ -313,12 +322,45 @@ impl<'a> PrinterPath<'a> {
                 }
             })
             .collect();
-        self.0 = Cow::Owned(transformed_path);
+        self.bytes = Cow::Owned(transformed_path);
     }
 
     /// Return the raw bytes for this path.
     pub fn as_bytes(&self) -> &[u8] {
-        &self.0
+        &self.bytes
+    }
+
+    /// Returns the hyperlink for this path, if possible.
+    pub fn hyperlink(&self) -> Option<&[u8]> {
+        self.hyperlink
+            .get_or_init(|| {
+                let path = self.path.canonicalize().ok()?;
+                let path = path.to_str()?.as_bytes();
+                let mut link = BString::from("file://");
+
+                if cfg!(windows) {
+                    let path = if path.starts_with(br"\\?\") {
+                        &path[4..]
+                    } else {
+                        path
+                    };
+
+                    link.push(b'/');
+                    link.extend(path.iter().cloned().map(|b| {
+                        if b == b'\\' {
+                            b'/'
+                        } else {
+                            b
+                        }
+                    }));
+                } else {
+                    link.push_str(path);
+                }
+
+                Some(link)
+            })
+            .as_ref()
+            .map(|b| b.as_bytes())
     }
 }
 
