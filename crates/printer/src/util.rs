@@ -386,9 +386,16 @@ impl EnvironmentInfo {
     #[cfg(unix)]
     fn build_hyperlink_prefix() -> Vec<u8> {
         let mut prefix = Vec::from(Self::HYPERLINK_SCHEME);
-        prefix.extend_from_slice(
-            gethostname::gethostname().to_string_lossy().as_bytes(),
-        );
+
+        if let Ok(wsl_distro) = std::env::var("WSL_DISTRO_NAME") {
+            prefix.extend_from_slice(b"wsl$/");
+            prefix.extend_from_slice(wsl_distro.as_bytes());
+        } else {
+            prefix.extend_from_slice(
+                gethostname::gethostname().to_string_lossy().as_bytes(),
+            );
+        }
+
         prefix
     }
 
