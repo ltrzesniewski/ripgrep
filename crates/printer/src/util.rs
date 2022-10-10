@@ -10,6 +10,7 @@ use grep_matcher::{Captures, LineTerminator, Match, Matcher};
 use grep_searcher::{
     LineIter, Searcher, SinkContext, SinkContextKind, SinkError, SinkMatch,
 };
+use lazy_static::lazy_static;
 #[cfg(feature = "serde1")]
 use serde::{Serialize, Serializer};
 
@@ -336,7 +337,7 @@ impl<'a> PrinterPath<'a> {
             .get_or_init(|| {
                 let path = self.path.canonicalize().ok()?;
                 let path = path.to_str()?.as_bytes();
-                let mut link = BString::from("file://");
+                let mut link = BString::from(ENVIRONMENT.hyperlink_prefix());
 
                 if cfg!(windows) {
                     let path = if path.starts_with(br"\\?\") {
@@ -345,7 +346,6 @@ impl<'a> PrinterPath<'a> {
                         path
                     };
 
-                    link.push(b'/');
                     link.extend(path.iter().cloned().map(|b| {
                         if b == b'\\' {
                             b'/'
@@ -361,6 +361,47 @@ impl<'a> PrinterPath<'a> {
             })
             .as_ref()
             .map(|b| b.as_bytes())
+    }
+}
+
+lazy_static! {
+    static ref ENVIRONMENT: EnvironmentInfo = EnvironmentInfo::new();
+}
+
+/// Stores cached environment information which will be valid for the
+/// whole run of the application.
+struct EnvironmentInfo {
+    hyperlink_prefix: Vec<u8>,
+}
+
+impl EnvironmentInfo {
+    const HYPERLINK_SCHEME: &'static str = "file://";
+
+    /// Returns environment information which will be valid for the
+    /// current run of the application.
+    pub fn new() -> EnvironmentInfo {
+        EnvironmentInfo { hyperlink_prefix: Self::build_hyperlink_prefix() }
+    }
+
+    #[cfg(unix)]
+    fn build_hyperlink_prefix() -> Vec<u8> {
+        let mut prefix = Vec::from(Self::HYPERLINK_SCHEME);
+        prefix.extend_from_slice(
+            gethostname::gethostname().to_string_lossy().as_bytes(),
+        );
+        prefix
+    }
+
+    #[cfg(windows)]
+    fn build_hyperlink_prefix() -> Vec<u8> {
+        let mut prefix = Vec::from(Self::HYPERLINK_SCHEME);
+        prefix.push(b'/');
+        prefix
+    }
+
+    /// Returns the first part of a hyperlink, up to the file path.
+    pub fn hyperlink_prefix(&self) -> &[u8] {
+        self.hyperlink_prefix.as_bytes()
     }
 }
 
