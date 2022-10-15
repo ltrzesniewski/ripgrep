@@ -103,6 +103,16 @@ impl termcolor::WriteColor for StandardStream {
     }
 
     #[inline]
+    fn supports_hyperlinks(&self) -> bool {
+        use self::StandardStreamKind::*;
+
+        match self.0 {
+            LineBuffered(ref w) => w.supports_hyperlinks(),
+            BlockBuffered(ref w) => w.supports_hyperlinks(),
+        }
+    }
+
+    #[inline]
     fn set_color(&mut self, spec: &termcolor::ColorSpec) -> io::Result<()> {
         use self::StandardStreamKind::*;
 

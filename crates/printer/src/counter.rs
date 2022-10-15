@@ -76,6 +76,10 @@ impl<W: WriteColor> WriteColor for CounterWriter<W> {
         self.wtr.supports_color()
     }
 
+    fn supports_hyperlinks(&self) -> bool {
+        self.wtr.supports_hyperlinks()
+    }
+
     fn set_color(&mut self, spec: &ColorSpec) -> io::Result<()> {
         self.wtr.set_color(spec)
     }

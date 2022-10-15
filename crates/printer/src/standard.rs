@@ -1521,7 +1521,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         wtr.set_color(self.config().colors.path())?;
 
         if let Some(link) =
-            if wtr.supports_color() { path.hyperlink() } else { None }
+            if wtr.supports_hyperlinks() { path.hyperlink() } else { None }
         {
             wtr.set_hyperlink(&HyperlinkSpec::new(link))?;
             wtr.write_all(path.as_bytes())?;
