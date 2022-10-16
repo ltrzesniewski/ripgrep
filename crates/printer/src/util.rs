@@ -1,11 +1,10 @@
 use once_cell::unsync::OnceCell;
 use std::borrow::Cow;
-use std::fmt;
-use std::io;
 use std::path::Path;
 use std::time;
+use std::{fmt, io};
 
-use bstr::{BString, ByteSlice, ByteVec};
+use bstr::{ByteSlice, ByteVec};
 use grep_matcher::{Captures, LineTerminator, Match, Matcher};
 use grep_searcher::{
     LineIter, Searcher, SinkContext, SinkContextKind, SinkError, SinkMatch,
@@ -281,7 +280,7 @@ impl<'a> Sunk<'a> {
 pub struct PrinterPath<'a> {
     path: &'a Path,
     bytes: Cow<'a, [u8]>,
-    hyperlink: OnceCell<Option<BString>>,
+    hyperlink: OnceCell<Option<Vec<u8>>>,
 }
 
 impl<'a> PrinterPath<'a> {
@@ -334,33 +333,43 @@ impl<'a> PrinterPath<'a> {
     /// Returns the hyperlink for this path, if possible.
     pub fn hyperlink(&self) -> Option<&[u8]> {
         self.hyperlink
-            .get_or_init(|| {
-                let path = self.path.canonicalize().ok()?;
-                let path = path.to_str()?.as_bytes();
-                let mut link = BString::from(ENVIRONMENT.hyperlink_prefix());
-
-                if cfg!(windows) {
-                    let path = if path.starts_with(br"\\?\") {
-                        &path[4..]
-                    } else {
-                        path
-                    };
-
-                    link.extend(path.iter().cloned().map(|b| {
-                        if b == b'\\' {
-                            b'/'
-                        } else {
-                            b
-                        }
-                    }));
-                } else {
-                    link.push_str(path);
-                }
-
-                Some(link)
-            })
+            .get_or_init(|| self.build_hyperlink())
             .as_ref()
             .map(|b| b.as_bytes())
+    }
+
+    #[cfg(unix)]
+    fn build_hyperlink(&self) -> Option<Vec<u8>> {
+        let path = self.path.canonicalize().ok()?;
+        let path = path.to_str()?.as_bytes();
+        let mut link = Vec::from(ENVIRONMENT.hyperlink_prefix());
+        link.push_str(path);
+        Some(link)
+    }
+
+    #[cfg(windows)]
+    fn build_hyperlink(&self) -> Option<Vec<u8>> {
+        const WIN32_NAMESPACE_PREFIX: &[u8] = br"\\?\";
+        const UNC_PREFIX: &[u8] = br"UNC\";
+
+        let path = self.path.canonicalize().ok()?;
+        let mut path = path.to_str()?.as_bytes();
+        let mut link = Vec::from(ENVIRONMENT.hyperlink_prefix());
+
+        if path.starts_with(WIN32_NAMESPACE_PREFIX) {
+            path = &path[WIN32_NAMESPACE_PREFIX.len()..];
+
+            if path.starts_with(UNC_PREFIX) {
+                path = &path[UNC_PREFIX.len()..];
+            } else {
+                link.push(b'/');
+            }
+        } else {
+            return None;
+        }
+
+        link.extend(path.iter().map(|&b| if b == b'\\' { b'/' } else { b }));
+        Some(link)
     }
 }
 
@@ -401,12 +410,10 @@ impl EnvironmentInfo {
 
     #[cfg(windows)]
     fn build_hyperlink_prefix() -> Vec<u8> {
-        let mut prefix = Vec::from(Self::HYPERLINK_SCHEME);
-        prefix.push(b'/');
-        prefix
+        Vec::from(Self::HYPERLINK_SCHEME)
     }
 
-    /// Returns the first part of a hyperlink, up to the file path.
+    /// Returns the first part of a hyperlink.
     pub fn hyperlink_prefix(&self) -> &[u8] {
         self.hyperlink_prefix.as_bytes()
     }
