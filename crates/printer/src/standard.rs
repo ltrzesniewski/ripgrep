@@ -11,7 +11,9 @@ use grep_searcher::{
     LineStep, Searcher, Sink, SinkContext, SinkContextKind, SinkFinish,
     SinkMatch,
 };
-use termcolor::{ColorSpec, HyperlinkSpec, NoColor, WriteColor};
+use termcolor::{
+    ColorSpec, HyperlinkSpec, NoColor, WriteColor, WriteColorExt,
+};
 
 use crate::color::ColorSpecs;
 use crate::counter::CounterWriter;
@@ -1520,16 +1522,13 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         let mut wtr = self.wtr().borrow_mut();
         wtr.set_color(self.config().colors.path())?;
 
-        if let Some(link) =
-            if wtr.supports_hyperlinks() { path.hyperlink() } else { None }
-        {
-            wtr.set_hyperlink(&HyperlinkSpec::new(link))?;
-            wtr.write_all(path.as_bytes())?;
-            wtr.set_hyperlink(&HyperlinkSpec::default())?;
+        let link = if wtr.supports_hyperlinks() {
+            path.hyperlink().map_or(HyperlinkSpec::none(), HyperlinkSpec::new)
         } else {
-            wtr.write_all(path.as_bytes())?;
-        }
+            HyperlinkSpec::none()
+        };
 
+        wtr.write_hyperlink(&link, path.as_bytes())?;
         wtr.reset()?;
         Ok(())
     }
