@@ -312,7 +312,7 @@ impl<'a> PrinterPath<'a> {
     /// environments, only `/` is treated as a path separator.
     fn replace_separator(&mut self, new_sep: u8) {
         let transformed_path: Vec<u8> = self
-            .bytes
+            .as_bytes()
             .bytes()
             .map(|b| {
                 if b == b'/' || (cfg!(windows) && b == b'\\') {

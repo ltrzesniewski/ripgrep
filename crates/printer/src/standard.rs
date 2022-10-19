@@ -1520,7 +1520,6 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
 
     fn write_path(&self, path: &PrinterPath) -> io::Result<()> {
         let mut wtr = self.wtr().borrow_mut();
-        wtr.set_color(self.config().colors.path())?;
 
         let link = if wtr.supports_hyperlinks() {
             path.hyperlink().map_or(HyperlinkSpec::none(), HyperlinkSpec::new)
@@ -1528,9 +1527,9 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
             HyperlinkSpec::none()
         };
 
+        wtr.set_color(self.config().colors.path())?;
         wtr.write_hyperlink(&link, path.as_bytes())?;
-        wtr.reset()?;
-        Ok(())
+        wtr.reset()
     }
 
     fn start_color_match(&self) -> io::Result<()> {
