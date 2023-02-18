@@ -32,6 +32,8 @@ pub const DEFAULT_TYPES: &[(&str, &[&str])] = &[
     ("bzip2", &["*.bz2", "*.tbz2"]),
     ("c", &["*.[chH]", "*.[chH].in", "*.cats"]),
     ("cabal", &["*.cabal"]),
+    ("candid", &["*.did"]),
+    ("carp", &["*.carp"]),
     ("cbor", &["*.cbor"]),
     ("ceylon", &["*.ceylon"]),
     ("clojure", &["*.clj", "*.cljc", "*.cljs", "*.cljx"]),
@@ -54,6 +56,7 @@ pub const DEFAULT_TYPES: &[(&str, &[&str])] = &[
     ("cython", &["*.pyx", "*.pxi", "*.pxd"]),
     ("d", &["*.d"]),
     ("dart", &["*.dart"]),
+    ("devicetree", &["*.dts", "*.dtsi"]),
     ("dhall", &["*.dhall"]),
     ("diff", &["*.patch", "*.diff"]),
     ("docker", &["*Dockerfile*"]),
@@ -154,8 +157,10 @@ pub const DEFAULT_TYPES: &[(&str, &[&str])] = &[
     ("mint", &["*.mint"]),
     ("mk", &["mkfile"]),
     ("ml", &["*.ml"]),
+    ("motoko", &["*.mo"]),
     ("msbuild", &[
         "*.csproj", "*.fsproj", "*.vcxproj", "*.proj", "*.props", "*.targets",
+        "*.sln",
     ]),
     ("nim", &["*.nim", "*.nimf", "*.nimble", "*.nims"]),
     ("nix", &["*.nix"]),
@@ -187,7 +192,9 @@ pub const DEFAULT_TYPES: &[(&str, &[&str])] = &[
     ("racket", &["*.rkt"]),
     ("rdoc", &["*.rdoc"]),
     ("readme", &["README*", "*README"]),
+    ("reasonml", &["*.re", "*.rei"]),
     ("red", &["*.r", "*.red", "*.reds"]),
+    ("rescript", &["*.res", "*.resi"]),
     ("robot", &["*.robot"]),
     ("rst", &["*.rst"]),
     ("ruby", &[
@@ -245,7 +252,11 @@ pub const DEFAULT_TYPES: &[(&str, &[&str])] = &[
     ("tex", &["*.tex", "*.ltx", "*.cls", "*.sty", "*.bib", "*.dtx", "*.ins"]),
     ("texinfo", &["*.texi"]),
     ("textile", &["*.textile"]),
-    ("tf", &["*.tf"]),
+    ("tf", &[
+        "*.tf", "*.auto.tfvars", "terraform.tfvars", "*.tf.json",
+        "*.auto.tfvars.json", "terraform.tfvars.json", "*.terraformrc",
+        "terraform.rc", "*.tfrc", "*.terraform.lock.hcl",
+    ]),
     ("thrift", &["*.thrift"]),
     ("toml", &["*.toml", "Cargo.lock"]),
     ("ts", &["*.ts", "*.tsx", "*.cts", "*.mts"]),
@@ -285,3 +296,26 @@ pub const DEFAULT_TYPES: &[(&str, &[&str])] = &[
     ]),
     ("zstd", &["*.zst", "*.zstd"]),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::DEFAULT_TYPES;
+
+    #[test]
+    fn default_types_are_sorted() {
+        let mut names = DEFAULT_TYPES.iter().map(|(name, _exts)| name);
+
+        let Some(mut previous_name) = names.next() else { return; };
+
+        for name in names {
+            assert!(
+                name > previous_name,
+                r#""{}" should be sorted before "{}" in `DEFAULT_TYPES`"#,
+                name,
+                previous_name
+            );
+
+            previous_name = name;
+        }
+    }
+}

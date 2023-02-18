@@ -2,11 +2,11 @@ ripgrep (rg)
 ------------
 ripgrep is a line-oriented search tool that recursively searches the current
 directory for a regex pattern. By default, ripgrep will respect gitignore rules
-and automatically skip hidden files/directories and binary files. ripgrep
-has first class support on Windows, macOS and Linux, with binary downloads
-available for [every release](https://github.com/BurntSushi/ripgrep/releases).
-ripgrep is similar to other popular search tools like The Silver Searcher, ack
-and grep.
+and automatically skip hidden files/directories and binary files. (To disable
+all automatic filtering by default, use `rg -uuu`.) ripgrep has first class
+support on Windows, macOS and Linux, with binary downloads available for [every
+release](https://github.com/BurntSushi/ripgrep/releases). ripgrep is similar to
+other popular search tools like The Silver Searcher, ack and grep.
 
 [![Build status](https://github.com/BurntSushi/ripgrep/workflows/ci/badge.svg)](https://github.com/BurntSushi/ripgrep/actions)
 [![Crates.io](https://img.shields.io/crates/v/ripgrep.svg)](https://crates.io/crates/ripgrep)
@@ -90,16 +90,16 @@ times are unaffected by the presence or absence of `-n`.
   because it contains most of their features and is generally faster. (See
   [the FAQ](FAQ.md#posix4ever) for more details on whether ripgrep can truly
   replace grep.)
-* Like other tools specialized to code search, ripgrep defaults to recursive
-  directory search and won't search files ignored by your
-  `.gitignore`/`.ignore`/`.rgignore` files. It also ignores hidden and binary
-  files by default. ripgrep also implements full support for `.gitignore`,
-  whereas there are many bugs related to that functionality in other code
-  search tools claiming to provide the same functionality.
-* ripgrep can search specific types of files. For example, `rg -tpy foo`
-  limits your search to Python files and `rg -Tjs foo` excludes JavaScript
-  files from your search. ripgrep can be taught about new file types with
-  custom matching rules.
+* Like other tools specialized to code search, ripgrep defaults to
+  [recursive search](GUIDE.md#recursive-search) and does [automatic
+  filtering](GUIDE.md#automatic-filtering). Namely, ripgrep won't search files
+  ignored by your `.gitignore`/`.ignore`/`.rgignore` files, it won't search
+  hidden files and it won't search binary files. Automatic filtering can be
+  disabled with `rg -uuu`.
+* ripgrep can [search specific types of files](GUIDE.md#manual-filtering-file-types).
+  For example, `rg -tpy foo` limits your search to Python files and `rg -Tjs
+  foo` excludes JavaScript files from your search. ripgrep can be taught about
+  new file types with custom matching rules.
 * ripgrep supports many features found in `grep`, such as showing the context
   of search results, searching multiple patterns, highlighting matches with
   color and full Unicode support. Unlike GNU grep, ripgrep stays fast while
@@ -110,16 +110,20 @@ times are unaffected by the presence or absence of `-n`.
   regex engine. PCRE2 support can be enabled with `-P/--pcre2` (use PCRE2
   always) or `--auto-hybrid-regex` (use PCRE2 only if needed). An alternative
   syntax is provided via the `--engine (default|pcre2|auto-hybrid)` option.
-* ripgrep supports searching files in text encodings other than UTF-8, such
-  as UTF-16, latin-1, GBK, EUC-JP, Shift_JIS and more. (Some support for
-  automatically detecting UTF-16 is provided. Other text encodings must be
-  specifically specified with the `-E/--encoding` flag.)
+* ripgrep has [rudimentary support for replacements](GUIDE.md#replacements),
+  which permit rewriting output based on what was matched.
+* ripgrep supports [searching files in text encodings](GUIDE.md#file-encoding)
+  other than UTF-8, such as UTF-16, latin-1, GBK, EUC-JP, Shift_JIS and more.
+  (Some support for automatically detecting UTF-16 is provided. Other text
+  encodings must be specifically specified with the `-E/--encoding` flag.)
 * ripgrep supports searching files compressed in a common format (brotli,
   bzip2, gzip, lz4, lzma, xz, or zstandard) with the `-z/--search-zip` flag.
 * ripgrep supports
   [arbitrary input preprocessing filters](GUIDE.md#preprocessor)
   which could be PDF text extraction, less supported decompression, decrypting,
   automatic encoding detection and so on.
+* ripgrep can be configured via a
+  [configuration file](GUIDE.md#configuration-file).
 
 In other words, use ripgrep if you like speed, filtering by default, fewer
 bugs and Unicode support.
@@ -267,6 +271,13 @@ $ nix-env --install ripgrep
 $ # (Or using the attribute name, which is also ripgrep.)
 ```
 
+If you're a **Guix** user, you can install ripgrep from the official
+package collection:
+
+```
+$ guix install ripgrep
+```
+
 If you're a **Debian** user (or a user of a Debian derivative like **Ubuntu**),
 then ripgrep can be installed using a binary `.deb` file provided in each
 [ripgrep release](https://github.com/BurntSushi/ripgrep/releases).
@@ -332,7 +343,7 @@ $ pkgman install ripgrep_x86
 
 If you're a **Rust programmer**, ripgrep can be installed with `cargo`.
 
-* Note that the minimum supported version of Rust for ripgrep is **1.34.0**,
+* Note that the minimum supported version of Rust for ripgrep is **1.65.0**,
   although ripgrep may work with older versions.
 * Note that the binary may be bigger than expected because it contains debug
   symbols. This is intentional. To remove debug symbols and therefore reduce
@@ -347,7 +358,7 @@ $ cargo install ripgrep
 
 ripgrep is written in Rust, so you'll need to grab a
 [Rust installation](https://www.rust-lang.org/) in order to compile it.
-ripgrep compiles with Rust 1.34.0 (stable) or newer. In general, ripgrep tracks
+ripgrep compiles with Rust 1.65.0 (stable) or newer. In general, ripgrep tracks
 the latest stable release of the Rust compiler.
 
 To build ripgrep:
