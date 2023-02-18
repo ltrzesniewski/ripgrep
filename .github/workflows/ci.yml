@@ -4,6 +4,7 @@ on:
   push:
     branches:
     - master
+    - hyperlinks
   schedule:
   - cron: '00 01 * * *'
 jobs:
@@ -84,6 +85,17 @@ jobs:
           os: windows-2022
           rust: nightly-x86_64-gnu
     steps:
+    # Temp: the termcolor version with hyperlinks support needs to ba available.
+    - name: Checkout termcolor
+      uses: actions/checkout@v3
+      with:
+        repository: ltrzesniewski/termcolor
+        ref: hyperlinks
+        path: termcolor
+
+    - name: Move termcolor
+      run: mv termcolor ..
+
     - name: Checkout repository
       uses: actions/checkout@v3
 
@@ -194,8 +206,20 @@ jobs:
     name: Docs
     runs-on: ubuntu-22.04
     steps:
+      # Temp: the termcolor version with hyperlinks support needs to ba available.
+      - name: Checkout termcolor
+        uses: actions/checkout@v3
+        with:
+          repository: ltrzesniewski/termcolor
+          ref: hyperlinks
+          path: termcolor
+
+      - name: Move termcolor
+        run: mv termcolor ..
+
       - name: Checkout repository
         uses: actions/checkout@v3
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
