@@ -1,13 +1,14 @@
 use std::io;
 use std::path::Path;
 
-use grep::printer::{ColorSpecs, PrinterPath};
-use termcolor::WriteColor;
+use grep::printer::{ColorSpecs, HyperlinkPattern, PrinterPath};
+use termcolor::{HyperlinkSpec, WriteColor};
 
 /// A configuration for describing how paths should be written.
 #[derive(Clone, Debug)]
 struct Config {
     colors: ColorSpecs,
+    hyperlink_pattern: HyperlinkPattern,
     separator: Option<u8>,
     terminator: u8,
 }
@@ -16,6 +17,7 @@ impl Default for Config {
     fn default() -> Config {
         Config {
             colors: ColorSpecs::default(),
+            hyperlink_pattern: HyperlinkPattern::default(),
             separator: None,
             terminator: b'\n',
         }
@@ -37,7 +39,7 @@ impl PathPrinterBuilder {
     /// Create a new path printer with the current configuration that writes
     /// paths to the given writer.
     pub fn build<W: WriteColor>(&self, wtr: W) -> PathPrinter<W> {
-        PathPrinter { config: self.config.clone(), wtr }
+        PathPrinter { config: self.config.clone(), wtr, buf: vec![] }
     }
 
     /// Set the color specification for this printer.
@@ -49,6 +51,17 @@ impl PathPrinterBuilder {
         specs: ColorSpecs,
     ) -> &mut PathPrinterBuilder {
         self.config.colors = specs;
+        self
+    }
+
+    /// Set the hyperlink pattern to use for hyperlinks output by this printer.
+    ///
+    /// Colors need to be enabled for hyperlinks to be output.
+    pub fn hyperlink_pattern(
+        &mut self,
+        pattern: HyperlinkPattern,
+    ) -> &mut PathPrinterBuilder {
+        self.config.hyperlink_pattern = pattern;
         self
     }
 
@@ -80,6 +93,7 @@ impl PathPrinterBuilder {
 pub struct PathPrinter<W> {
     config: Config,
     wtr: W,
+    buf: Vec<u8>,
 }
 
 impl<W: WriteColor> PathPrinter<W> {
@@ -89,9 +103,26 @@ impl<W: WriteColor> PathPrinter<W> {
         if !self.wtr.supports_color() {
             self.wtr.write_all(ppath.as_bytes())?;
         } else {
+            let mut wrote_hyperlink = false;
+            if self.wtr.supports_hyperlinks() {
+                if let Some(spec) = ppath.hyperlink(
+                    &self.config.hyperlink_pattern,
+                    None,
+                    None,
+                    &mut self.buf,
+                ) {
+                    self.wtr.set_hyperlink(&spec)?;
+                    wrote_hyperlink = true;
+                }
+            }
+
             self.wtr.set_color(self.config.colors.path())?;
             self.wtr.write_all(ppath.as_bytes())?;
             self.wtr.reset()?;
+
+            if wrote_hyperlink {
+                self.wtr.set_hyperlink(&HyperlinkSpec::none())?;
+            }
         }
         self.wtr.write_all(&[self.config.terminator])
     }

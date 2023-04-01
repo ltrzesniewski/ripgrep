@@ -342,6 +342,7 @@ impl<'a> PrinterPath<'a> {
     ) -> Option<HyperlinkSpec<'b>> {
         let file_path = self.hyperlink_file_path()?;
         let values = HyperlinkValues::new(file_path, line_number, column);
+        buffer.clear();
         pattern.render(&values, buffer).ok()?;
         Some(HyperlinkSpec::new(buffer))
     }

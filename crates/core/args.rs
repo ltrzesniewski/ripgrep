@@ -237,6 +237,7 @@ impl Args {
         let mut builder = PathPrinterBuilder::new();
         builder
             .color_specs(self.matches().color_specs()?)
+            .hyperlink_pattern(self.matches().hyperlink_pattern()?)
             .separator(self.matches().path_separator()?)
             .terminator(self.matches().path_terminator().unwrap_or(b'\n'));
         Ok(builder.build(wtr))
@@ -822,6 +823,7 @@ impl ArgMatches {
         builder
             .kind(self.summary_kind().expect("summary format"))
             .color_specs(self.color_specs()?)
+            .hyperlink_pattern(self.hyperlink_pattern()?)
             .stats(self.stats())
             .path(self.with_filename(paths))
             .max_matches(self.max_count()?)

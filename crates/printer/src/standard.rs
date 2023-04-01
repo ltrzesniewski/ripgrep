@@ -1225,7 +1225,9 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     ) -> io::Result<()> {
         let sep = self.separator_field();
 
-        self.start_hyperlink(self.path(), line_number, column)?;
+        if let Some(path) = self.path() {
+            self.start_hyperlink(path, line_number, column)?;
+        }
         if !self.config().heading {
             self.write_path_field(sep)?;
         }
@@ -1240,7 +1242,9 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         if self.config().byte_offset {
             self.write_byte_offset(absolute_byte_offset, sep)?;
         }
-        self.end_hyperlink()?;
+        if self.path().is_some() {
+            self.end_hyperlink()?;
+        }
         Ok(())
     }
 
@@ -1540,34 +1544,26 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     }
 
     fn write_path_hyperlink(&self, path: &PrinterPath) -> io::Result<()> {
-        self.start_hyperlink(Some(path), None, None)?;
-        let mut wtr = self.wtr().borrow_mut();
-        wtr.set_color(self.config().colors.path())?;
-        wtr.write_all(path.as_bytes())?;
-        wtr.reset()?;
-        drop(wtr);
+        self.start_hyperlink(path, None, None)?;
+        self.write_path(path)?;
         self.end_hyperlink()
     }
 
     fn start_hyperlink(
         &self,
-        path: Option<&PrinterPath>,
+        path: &PrinterPath,
         line_number: Option<u64>,
         column: Option<u64>,
     ) -> io::Result<()> {
-        if let Some(path) = path {
-            let mut wtr = self.wtr().borrow_mut();
-            if wtr.supports_hyperlinks() {
-                let mut buf = vec![];
-                let spec = path
-                    .hyperlink(
-                        &self.config().hyperlink_pattern,
-                        line_number,
-                        column,
-                        &mut buf,
-                    )
-                    .unwrap_or(HyperlinkSpec::none());
-
+        let mut wtr = self.wtr().borrow_mut();
+        if wtr.supports_hyperlinks() {
+            let mut buf = vec![]; // TODO: Don't allocate a buffer for each link
+            if let Some(spec) = path.hyperlink(
+                &self.config().hyperlink_pattern,
+                line_number,
+                column,
+                &mut buf,
+            ) {
                 wtr.set_hyperlink(&spec)?;
             }
         }
