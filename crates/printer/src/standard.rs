@@ -125,6 +125,7 @@ impl StandardBuilder {
         Standard {
             config: self.config.clone(),
             wtr: RefCell::new(CounterWriter::new(wtr)),
+            buf: RefCell::new(vec![]),
             matches: vec![],
         }
     }
@@ -481,6 +482,7 @@ impl StandardBuilder {
 pub struct Standard<W> {
     config: Config,
     wtr: RefCell<CounterWriter<W>>,
+    buf: RefCell<Vec<u8>>,
     matches: Vec<Match>,
 }
 
@@ -1557,7 +1559,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     ) -> io::Result<()> {
         let mut wtr = self.wtr().borrow_mut();
         if wtr.supports_hyperlinks() {
-            let mut buf = vec![]; // TODO: Don't allocate a buffer for each link
+            let mut buf = self.buf().borrow_mut();
             if let Some(spec) = path.hyperlink(
                 &self.config().hyperlink_pattern,
                 line_number,
@@ -1629,6 +1631,11 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     /// Return the underlying writer that we are printing to.
     fn wtr(&self) -> &'a RefCell<CounterWriter<W>> {
         &self.sink.standard.wtr
+    }
+
+    /// Return a temporary buffer, which may be used for anything.
+    fn buf(&self) -> &'a RefCell<Vec<u8>> {
+        &self.sink.standard.buf
     }
 
     /// Return the path associated with this printer, if one exists.

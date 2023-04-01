@@ -1134,7 +1134,7 @@ impl ArgMatches {
     }
 
     /// Returns the hyperlink pattern to use. A default pattern suitable
-    /// for the current system is used if the value os not set.
+    /// for the current system is used if the value is not set.
     ///
     /// If an invalid pattern is provided, then an error is returned.
     fn hyperlink_pattern(&self) -> Result<HyperlinkPattern> {

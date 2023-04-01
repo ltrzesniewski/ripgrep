@@ -5,6 +5,7 @@ on:
     branches:
     - master
     - hyperlinks
+    - hyperlinks-cfg
   schedule:
   - cron: '00 01 * * *'
 jobs:

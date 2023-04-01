@@ -260,7 +260,7 @@ mod tests {
                 &gethostname::gethostname().to_string_lossy()
             )
         );
-        assert_eq!(pattern.parts.len(), 4);
+        assert_eq!(pattern.parts.len(), 6);
         assert!(pattern.parts.contains(&Part::File));
         assert!(pattern.parts.contains(&Part::Line));
     }

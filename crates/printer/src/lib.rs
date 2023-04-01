@@ -67,7 +67,9 @@ fn example() -> Result<(), Box<Error>> {
 pub use crate::color::{
     default_color_specs, ColorError, ColorSpecs, UserColorSpec,
 };
-pub use crate::hyperlink::{HyperlinkPattern, HyperlinkPatternError};
+pub use crate::hyperlink::{
+    HyperlinkPattern, HyperlinkPatternError, HyperlinkValues,
+};
 #[cfg(feature = "serde1")]
 pub use crate::json::{JSONBuilder, JSONSink, JSON};
 pub use crate::standard::{Standard, StandardBuilder, StandardSink};
