@@ -1,6 +1,8 @@
 use bstr::ByteSlice;
+use lazy_static::lazy_static;
 use std::error::Error;
 use std::fmt::Display;
+use std::io::Write;
 use std::str::FromStr;
 
 /// A hyperlink pattern with placeholders.
@@ -33,6 +35,14 @@ pub enum HyperlinkPatternError {
     InvalidPlaceholder(String),
 }
 
+/// The values to replace the pattern placeholders with.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HyperlinkValues<'a> {
+    file: &'a [u8],
+    line: u64,
+    column: u64,
+}
+
 impl HyperlinkPattern {
     /// Creates an empty hyperlink pattern.
     pub fn new() -> Self {
@@ -48,9 +58,14 @@ impl HyperlinkPattern {
     }
 
     fn append_hostname(&mut self) {
-        self.append_text(
-            gethostname::gethostname().to_string_lossy().as_bytes(),
-        );
+        lazy_static! {
+            static ref HOSTNAME: Vec<u8> = gethostname::gethostname()
+                .to_string_lossy()
+                .as_bytes()
+                .to_vec();
+        }
+
+        self.append_text(&HOSTNAME);
     }
 
     fn append_placeholder(&mut self, part: Part) {
@@ -60,6 +75,18 @@ impl HyperlinkPattern {
     /// Returns true if this pattern is empty.
     pub fn is_empty(&self) -> bool {
         self.parts.is_empty()
+    }
+
+    /// Renders this pattern with the given values to the given output.
+    pub fn render(
+        &self,
+        values: &HyperlinkValues,
+        output: &mut impl Write,
+    ) -> std::io::Result<()> {
+        for part in &self.parts {
+            part.render(values, output)?
+        }
+        Ok(())
     }
 }
 
@@ -143,6 +170,21 @@ impl ToString for HyperlinkPattern {
     }
 }
 
+impl Part {
+    fn render(
+        &self,
+        values: &HyperlinkValues,
+        output: &mut impl Write,
+    ) -> std::io::Result<()> {
+        match self {
+            Part::Text(text) => output.write_all(text),
+            Part::File => output.write_all(values.file),
+            Part::Line => write!(output, "{}", values.line),
+            Part::Column => write!(output, "{}", values.column),
+        }
+    }
+}
+
 impl ToString for Part {
     fn to_string(&self) -> String {
         match self {
@@ -176,6 +218,21 @@ impl Display for HyperlinkPatternError {
 }
 
 impl Error for HyperlinkPatternError {}
+
+impl<'a> HyperlinkValues<'a> {
+    /// Creates a new set of hyperlink values.
+    pub fn new(
+        file: &'a [u8],
+        line: Option<u64>,
+        column: Option<u64>,
+    ) -> Self {
+        HyperlinkValues {
+            file,
+            line: line.unwrap_or(1),
+            column: column.unwrap_or(1),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

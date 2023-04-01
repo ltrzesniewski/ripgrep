@@ -11,9 +11,7 @@ use grep_searcher::{
     LineStep, Searcher, Sink, SinkContext, SinkContextKind, SinkFinish,
     SinkMatch,
 };
-use termcolor::{
-    ColorSpec, HyperlinkSpec, NoColor, WriteColor, WriteColorExt,
-};
+use termcolor::{ColorSpec, HyperlinkSpec, NoColor, WriteColor};
 
 use crate::color::ColorSpecs;
 use crate::counter::CounterWriter;
@@ -1227,6 +1225,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     ) -> io::Result<()> {
         let sep = self.separator_field();
 
+        self.start_hyperlink(self.path(), line_number, column)?;
         if !self.config().heading {
             self.write_path_field(sep)?;
         }
@@ -1241,6 +1240,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         if self.config().byte_offset {
             self.write_byte_offset(absolute_byte_offset, sep)?;
         }
+        self.end_hyperlink()?;
         Ok(())
     }
 
@@ -1402,7 +1402,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     /// terminator.)
     fn write_path_line(&self) -> io::Result<()> {
         if let Some(path) = self.path() {
-            self.write_path(path)?;
+            self.write_path_hyperlink(path)?;
             if let Some(term) = self.config().path_terminator {
                 self.write(&[term])?;
             } else {
@@ -1454,7 +1454,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         let bin = self.searcher.binary_detection();
         if let Some(byte) = bin.quit_byte() {
             if let Some(path) = self.path() {
-                self.write_path(path)?;
+                self.write_path_hyperlink(path)?;
                 self.write(b": ")?;
             }
             let remainder = format!(
@@ -1466,7 +1466,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
             self.write(remainder.as_bytes())?;
         } else if let Some(byte) = bin.convert_byte() {
             if let Some(path) = self.path() {
-                self.write_path(path)?;
+                self.write_path_hyperlink(path)?;
                 self.write(b": ")?;
             }
             let remainder = format!(
@@ -1534,16 +1534,52 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
 
     fn write_path(&self, path: &PrinterPath) -> io::Result<()> {
         let mut wtr = self.wtr().borrow_mut();
-
-        let link = if wtr.supports_hyperlinks() {
-            path.hyperlink().map_or(HyperlinkSpec::none(), HyperlinkSpec::new)
-        } else {
-            HyperlinkSpec::none()
-        };
-
         wtr.set_color(self.config().colors.path())?;
-        wtr.write_hyperlink(&link, path.as_bytes())?;
+        wtr.write_all(path.as_bytes())?;
         wtr.reset()
+    }
+
+    fn write_path_hyperlink(&self, path: &PrinterPath) -> io::Result<()> {
+        self.start_hyperlink(Some(path), None, None)?;
+        let mut wtr = self.wtr().borrow_mut();
+        wtr.set_color(self.config().colors.path())?;
+        wtr.write_all(path.as_bytes())?;
+        wtr.reset()?;
+        drop(wtr);
+        self.end_hyperlink()
+    }
+
+    fn start_hyperlink(
+        &self,
+        path: Option<&PrinterPath>,
+        line_number: Option<u64>,
+        column: Option<u64>,
+    ) -> io::Result<()> {
+        if let Some(path) = path {
+            let mut wtr = self.wtr().borrow_mut();
+            if wtr.supports_hyperlinks() {
+                let mut buf = vec![];
+                let spec = path
+                    .hyperlink(
+                        &self.config().hyperlink_pattern,
+                        line_number,
+                        column,
+                        &mut buf,
+                    )
+                    .unwrap_or(HyperlinkSpec::none());
+
+                wtr.set_hyperlink(&spec)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn end_hyperlink(&self) -> io::Result<()> {
+        let mut wtr = self.wtr().borrow_mut();
+        if wtr.supports_hyperlinks() {
+            wtr.set_hyperlink(&HyperlinkSpec::none())?;
+        }
+        Ok(())
     }
 
     fn start_color_match(&self) -> io::Result<()> {
