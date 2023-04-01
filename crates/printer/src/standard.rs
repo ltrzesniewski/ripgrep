@@ -17,6 +17,7 @@ use termcolor::{
 
 use crate::color::ColorSpecs;
 use crate::counter::CounterWriter;
+use crate::hyperlink::HyperlinkPattern;
 use crate::stats::Stats;
 use crate::util::{
     find_iter_at_in_context, trim_ascii_prefix, trim_line_terminator,
@@ -31,6 +32,7 @@ use crate::util::{
 #[derive(Debug, Clone)]
 struct Config {
     colors: ColorSpecs,
+    hyperlink_pattern: HyperlinkPattern,
     stats: bool,
     heading: bool,
     path: bool,
@@ -56,6 +58,7 @@ impl Default for Config {
     fn default() -> Config {
         Config {
             colors: ColorSpecs::default(),
+            hyperlink_pattern: HyperlinkPattern::default(),
             stats: false,
             heading: false,
             path: true,
@@ -159,6 +162,17 @@ impl StandardBuilder {
     /// builder.
     pub fn color_specs(&mut self, specs: ColorSpecs) -> &mut StandardBuilder {
         self.config.colors = specs;
+        self
+    }
+
+    /// Set the hyperlink pattern to use for hyperlinks output by this printer.
+    ///
+    /// Colors need to be enabled for hyperlinks to be output.
+    pub fn hyperlink_pattern(
+        &mut self,
+        pattern: HyperlinkPattern,
+    ) -> &mut StandardBuilder {
+        self.config.hyperlink_pattern = pattern;
         self
     }
 
