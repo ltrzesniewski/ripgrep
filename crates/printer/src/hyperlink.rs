@@ -1,12 +1,11 @@
 use bstr::ByteSlice;
-use lazy_static::lazy_static;
 use std::error::Error;
 use std::fmt::Display;
 use std::io::Write;
 use std::str::FromStr;
 
 /// A hyperlink pattern with placeholders.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct HyperlinkPattern {
     parts: Vec<Part>,
 }
@@ -49,6 +48,38 @@ impl HyperlinkPattern {
         HyperlinkPattern { parts: Vec::new() }
     }
 
+    /// Creates a default pattern suitable for Unix.
+    ///
+    /// The returned pattern is: `file://{host}/{file}`  
+    /// except on WSL, where it is: `file://wsl$/{distro}/{file}`
+    #[cfg(unix)]
+    pub fn new_system_default() -> Self {
+        let mut pattern = Self::new();
+        pattern.append_text(b"file://");
+
+        if let Ok(wsl_distro) = std::env::var("WSL_DISTRO_NAME") {
+            pattern.append_text(b"wsl$/");
+            pattern.append_text(wsl_distro.as_bytes());
+        } else {
+            pattern.append_hostname();
+        }
+
+        pattern.append_text(b"/");
+        pattern.append_placeholder(Part::File);
+        pattern
+    }
+
+    /// Creates a default pattern suitable for Windows.
+    ///
+    /// The returned pattern is: `file:///{file}`
+    #[cfg(windows)]
+    pub fn new_system_default() -> Self {
+        let mut pattern = Self::new();
+        pattern.append_text(b"file:///");
+        pattern.append_placeholder(Part::File);
+        pattern
+    }
+
     fn append_text(&mut self, text: &[u8]) {
         if let Some(Part::Text(contents)) = self.parts.last_mut() {
             contents.extend_from_slice(text);
@@ -58,14 +89,9 @@ impl HyperlinkPattern {
     }
 
     fn append_hostname(&mut self) {
-        lazy_static! {
-            static ref HOSTNAME: Vec<u8> = gethostname::gethostname()
-                .to_string_lossy()
-                .as_bytes()
-                .to_vec();
-        }
-
-        self.append_text(&HOSTNAME);
+        self.append_text(
+            gethostname::gethostname().to_string_lossy().as_bytes(),
+        );
     }
 
     fn append_placeholder(&mut self, part: Part) {
@@ -87,33 +113,6 @@ impl HyperlinkPattern {
             part.render(values, output)?
         }
         Ok(())
-    }
-}
-
-impl Default for HyperlinkPattern {
-    #[cfg(unix)]
-    fn default() -> Self {
-        let mut pattern = Self::new();
-        pattern.append_text(b"file://");
-
-        if let Ok(wsl_distro) = std::env::var("WSL_DISTRO_NAME") {
-            pattern.append_text(b"wsl$/");
-            pattern.append_text(wsl_distro.as_bytes());
-        } else {
-            pattern.append_hostname();
-        }
-
-        pattern.append_text(b"/");
-        pattern.append_placeholder(Part::File);
-        pattern
-    }
-
-    #[cfg(windows)]
-    fn default() -> Self {
-        let mut pattern = Self::new();
-        pattern.append_text(b"file:///");
-        pattern.append_placeholder(Part::File);
-        pattern
     }
 }
 

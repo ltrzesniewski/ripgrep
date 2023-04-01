@@ -340,6 +340,9 @@ impl<'a> PrinterPath<'a> {
         column: Option<u64>,
         buffer: &'b mut Vec<u8>,
     ) -> Option<HyperlinkSpec<'b>> {
+        if pattern.is_empty() {
+            return None;
+        }
         let file_path = self.hyperlink_file_path()?;
         let values = HyperlinkValues::new(file_path, line_number, column);
         buffer.clear();

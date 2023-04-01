@@ -1133,13 +1133,14 @@ impl ArgMatches {
         self.is_present("hidden") || self.unrestricted_count() >= 2
     }
 
-    /// Returns the hyperlink pattern to use.
+    /// Returns the hyperlink pattern to use. A default pattern suitable
+    /// for the current system is used if the value os not set.
     ///
     /// If an invalid pattern is provided, then an error is returned.
     fn hyperlink_pattern(&self) -> Result<HyperlinkPattern> {
         Ok(match self.value_of_lossy("hyperlink-format") {
             Some(pattern) => HyperlinkPattern::from_str(&pattern)?,
-            None => HyperlinkPattern::default(),
+            None => HyperlinkPattern::new_system_default(),
         })
     }
 
