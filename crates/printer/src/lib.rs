@@ -94,6 +94,7 @@ mod macros;
 mod color;
 mod counter;
 mod hyperlink;
+mod hyperlink_aliases;
 #[cfg(feature = "serde1")]
 mod json;
 #[cfg(feature = "serde1")]

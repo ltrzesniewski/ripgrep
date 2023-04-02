@@ -1,3 +1,4 @@
+use crate::hyperlink_aliases::HYPERLINK_PATTERN_ALIASES;
 use bstr::ByteSlice;
 use std::error::Error;
 use std::fmt::Display;
@@ -179,6 +180,12 @@ impl FromStr for HyperlinkPattern {
         let mut pattern = Self::new();
         let mut input = s.as_bytes();
 
+        if let Ok(index) = HYPERLINK_PATTERN_ALIASES
+            .binary_search_by_key(&input, |&(name, _)| name.as_bytes())
+        {
+            input = HYPERLINK_PATTERN_ALIASES[index].1.as_bytes();
+        }
+
         loop {
             if input.is_empty() {
                 break;
@@ -344,6 +351,11 @@ mod tests {
     }
 
     #[test]
+    fn handle_alias() {
+        assert!(HyperlinkPattern::from_str("file").is_ok());
+    }
+
+    #[test]
     fn parse_pattern() {
         let pattern = HyperlinkPattern::from_str(
             "foo://{host}/bar/{file}:{line}:{column}",
@@ -411,5 +423,34 @@ mod tests {
             HyperlinkPattern::from_str("f*:{file}").unwrap_err(),
             HyperlinkPatternError::InvalidScheme
         );
+    }
+
+    #[test]
+    fn aliases_are_valid() {
+        for (name, definition) in HYPERLINK_PATTERN_ALIASES {
+            assert!(
+                HyperlinkPattern::from_str(definition).is_ok(),
+                "invalid hyperlink alias: {}",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn aliases_are_sorted() {
+        let mut names = HYPERLINK_PATTERN_ALIASES.iter().map(|(name, _)| name);
+
+        let Some(mut previous_name) = names.next() else { return; };
+
+        for name in names {
+            assert!(
+                name > previous_name,
+                r#""{}" should be sorted before "{}" in `HYPERLINK_PATTERN_ALIASES`"#,
+                name,
+                previous_name
+            );
+
+            previous_name = name;
+        }
     }
 }
