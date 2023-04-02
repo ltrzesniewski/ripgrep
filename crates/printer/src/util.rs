@@ -13,8 +13,8 @@ use grep_searcher::{
 use serde::{Serialize, Serializer};
 use termcolor::HyperlinkSpec;
 
-use crate::hyperlink::HyperlinkValues;
-use crate::{HyperlinkPattern, MAX_LOOK_AHEAD};
+use crate::hyperlink::{HyperlinkPattern, HyperlinkValues};
+use crate::MAX_LOOK_AHEAD;
 
 /// A type for handling replacements while amortizing allocation.
 pub struct Replacer<M: Matcher> {
@@ -333,7 +333,7 @@ impl<'a> PrinterPath<'a> {
 
     /// Creates a hyperlink for this path and the given line and column, using the specified
     /// pattern. Uses the given buffer to store the hyperlink.
-    pub fn hyperlink<'b>(
+    pub fn create_hyperlink<'b>(
         &self,
         pattern: &HyperlinkPattern,
         line_number: Option<u64>,

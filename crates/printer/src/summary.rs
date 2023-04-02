@@ -6,13 +6,13 @@ use std::time::Instant;
 
 use grep_matcher::Matcher;
 use grep_searcher::{Searcher, Sink, SinkError, SinkFinish, SinkMatch};
-use termcolor::{ColorSpec, HyperlinkSpec, NoColor, WriteColor};
+use termcolor::{ColorSpec, NoColor, WriteColor};
 
 use crate::color::ColorSpecs;
 use crate::counter::CounterWriter;
+use crate::hyperlink::{HyperlinkPattern, HyperlinkSpan};
 use crate::stats::Stats;
 use crate::util::{find_iter_at_in_context, PrinterPath};
-use crate::HyperlinkPattern;
 
 /// The configuration for the summary printer.
 ///
@@ -581,16 +581,18 @@ impl<'p, 's, M: Matcher, W: WriteColor> SummarySink<'p, 's, M, W> {
     /// (color and hyperlink).
     fn write_path(&mut self) -> io::Result<()> {
         if let Some(ref path) = self.path {
-            let mut hyperlink = false;
+            let mut hyperlink = HyperlinkSpan::default();
             if self.summary.wtr.borrow_mut().supports_hyperlinks() {
-                if let Some(spec) = path.hyperlink(
+                if let Some(spec) = path.create_hyperlink(
                     &self.summary.config.hyperlink_pattern,
                     None,
                     None,
                     &mut self.summary.buf,
                 ) {
-                    self.summary.wtr.borrow_mut().set_hyperlink(&spec)?;
-                    hyperlink = true;
+                    hyperlink = HyperlinkSpan::start(
+                        &mut *self.summary.wtr.borrow_mut(),
+                        &spec,
+                    )?;
                 }
             }
 
@@ -599,11 +601,8 @@ impl<'p, 's, M: Matcher, W: WriteColor> SummarySink<'p, 's, M, W> {
                 path.as_bytes(),
             )?;
 
-            if hyperlink {
-                self.summary
-                    .wtr
-                    .borrow_mut()
-                    .set_hyperlink(&HyperlinkSpec::none())?;
+            if hyperlink.is_active() {
+                hyperlink.end(&mut *self.summary.wtr.borrow_mut())?;
             }
         }
         Ok(())

@@ -11,11 +11,11 @@ use grep_searcher::{
     LineStep, Searcher, Sink, SinkContext, SinkContextKind, SinkFinish,
     SinkMatch,
 };
-use termcolor::{ColorSpec, HyperlinkSpec, NoColor, WriteColor};
+use termcolor::{ColorSpec, NoColor, WriteColor};
 
 use crate::color::ColorSpecs;
 use crate::counter::CounterWriter;
-use crate::hyperlink::HyperlinkPattern;
+use crate::hyperlink::{HyperlinkPattern, HyperlinkSpan};
 use crate::stats::Stats;
 use crate::util::{
     find_iter_at_in_context, trim_ascii_prefix, trim_line_terminator,
@@ -1230,7 +1230,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         // If a heading was written, and the hyperlink pattern is invariant on the line number,
         // then don't hyperlink each line prelude, as it wouldn't point to the line anyway.
         // The hyperlink on the heading should be sufficient and less confusing.
-        let mut hyperlink = false;
+        let mut hyperlink = HyperlinkSpan::default();
 
         if let Some(path) = self.path() {
             if self.config().hyperlink_pattern.is_line_dependent()
@@ -1253,8 +1253,8 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         if self.config().byte_offset {
             self.write_byte_offset(absolute_byte_offset, sep)?;
         }
-        if hyperlink {
-            self.end_hyperlink()?;
+        if hyperlink.is_active() {
+            hyperlink.end(&mut *self.wtr().borrow_mut())?;
         }
         Ok(())
     }
@@ -1555,9 +1555,9 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     }
 
     fn write_path_hyperlink(&self, path: &PrinterPath) -> io::Result<()> {
-        self.start_hyperlink(path, None, None)?;
+        let mut hyperlink = self.start_hyperlink(path, None, None)?;
         self.write_path(path)?;
-        self.end_hyperlink()
+        hyperlink.end(&mut *self.wtr().borrow_mut())
     }
 
     fn start_hyperlink(
@@ -1565,29 +1565,20 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         path: &PrinterPath,
         line_number: Option<u64>,
         column: Option<u64>,
-    ) -> io::Result<bool> {
+    ) -> io::Result<HyperlinkSpan> {
         let mut wtr = self.wtr().borrow_mut();
         if wtr.supports_hyperlinks() {
             let mut buf = self.buf().borrow_mut();
-            if let Some(spec) = path.hyperlink(
+            if let Some(spec) = path.create_hyperlink(
                 &self.config().hyperlink_pattern,
                 line_number,
                 column,
                 &mut buf,
             ) {
-                wtr.set_hyperlink(&spec)?;
-                return Ok(true);
+                return HyperlinkSpan::start(&mut *wtr, &spec);
             }
         }
-        Ok(false)
-    }
-
-    fn end_hyperlink(&self) -> io::Result<()> {
-        let mut wtr = self.wtr().borrow_mut();
-        if wtr.supports_hyperlinks() {
-            wtr.set_hyperlink(&HyperlinkSpec::none())?;
-        }
-        Ok(())
+        Ok(HyperlinkSpan::default())
     }
 
     fn start_color_match(&self) -> io::Result<()> {
@@ -1644,6 +1635,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     }
 
     /// Return a temporary buffer, which may be used for anything.
+    /// It is not necessarily empty when returned.
     fn buf(&self) -> &'a RefCell<Vec<u8>> {
         &self.sink.standard.buf
     }

@@ -1,8 +1,10 @@
 use std::io;
 use std::path::Path;
 
-use grep::printer::{ColorSpecs, HyperlinkPattern, PrinterPath};
-use termcolor::{HyperlinkSpec, WriteColor};
+use grep::printer::{
+    ColorSpecs, HyperlinkPattern, HyperlinkSpan, PrinterPath,
+};
+use termcolor::WriteColor;
 
 /// A configuration for describing how paths should be written.
 #[derive(Clone, Debug)]
@@ -103,16 +105,15 @@ impl<W: WriteColor> PathPrinter<W> {
         if !self.wtr.supports_color() {
             self.wtr.write_all(ppath.as_bytes())?;
         } else {
-            let mut hyperlink = false;
+            let mut hyperlink = HyperlinkSpan::default();
             if self.wtr.supports_hyperlinks() {
-                if let Some(spec) = ppath.hyperlink(
+                if let Some(spec) = ppath.create_hyperlink(
                     &self.config.hyperlink_pattern,
                     None,
                     None,
                     &mut self.buf,
                 ) {
-                    self.wtr.set_hyperlink(&spec)?;
-                    hyperlink = true;
+                    hyperlink = HyperlinkSpan::start(&mut self.wtr, &spec)?;
                 }
             }
 
@@ -120,9 +121,7 @@ impl<W: WriteColor> PathPrinter<W> {
             self.wtr.write_all(ppath.as_bytes())?;
             self.wtr.reset()?;
 
-            if hyperlink {
-                self.wtr.set_hyperlink(&HyperlinkSpec::none())?;
-            }
+            hyperlink.end(&mut self.wtr)?;
         }
         self.wtr.write_all(&[self.config.terminator])
     }

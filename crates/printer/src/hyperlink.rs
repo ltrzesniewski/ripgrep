@@ -1,8 +1,10 @@
 use bstr::ByteSlice;
 use std::error::Error;
 use std::fmt::Display;
+use std::io;
 use std::io::Write;
 use std::str::FromStr;
+use termcolor::{HyperlinkSpec, WriteColor};
 
 /// A hyperlink pattern with placeholders.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -123,7 +125,7 @@ impl HyperlinkPattern {
         &self,
         values: &HyperlinkValues,
         output: &mut impl Write,
-    ) -> std::io::Result<()> {
+    ) -> io::Result<()> {
         for part in &self.parts {
             part.render(values, output)?;
         }
@@ -225,7 +227,7 @@ impl Part {
         &self,
         values: &HyperlinkValues,
         output: &mut impl Write,
-    ) -> std::io::Result<()> {
+    ) -> io::Result<()> {
         match self {
             Part::Text(text) => output.write_all(text),
             Part::File => output.write_all(values.file),
@@ -288,6 +290,42 @@ impl<'a> HyperlinkValues<'a> {
             line: line.unwrap_or(1),
             column: column.unwrap_or(1),
         }
+    }
+}
+
+/// A simple abstraction over a hyperlink span written to the terminal.
+/// This helps tracking whether a hyperlink has been started, and should be ended.
+#[derive(Debug, Default)]
+pub struct HyperlinkSpan {
+    active: bool,
+}
+
+impl HyperlinkSpan {
+    /// Starts a hyperlink and returns a span which tracks whether it is still in effect.
+    pub fn start(
+        wtr: &mut impl WriteColor,
+        hyperlink: &HyperlinkSpec,
+    ) -> io::Result<Self> {
+        if wtr.supports_hyperlinks() && hyperlink.uri().is_some() {
+            wtr.set_hyperlink(hyperlink)?;
+            Ok(HyperlinkSpan { active: true })
+        } else {
+            Ok(HyperlinkSpan { active: false })
+        }
+    }
+
+    /// Ends the hyperlink span if it is active.
+    pub fn end(&mut self, wtr: &mut impl WriteColor) -> io::Result<()> {
+        if self.is_active() {
+            wtr.set_hyperlink(&HyperlinkSpec::none())?;
+            self.active = false;
+        }
+        Ok(())
+    }
+
+    /// Returns true if there is currently an active hyperlink.
+    pub fn is_active(&self) -> bool {
+        self.active
     }
 }
 
