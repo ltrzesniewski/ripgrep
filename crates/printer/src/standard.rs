@@ -1230,14 +1230,13 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         // If a heading was written, and the hyperlink pattern is invariant on the line number,
         // then don't hyperlink each line prelude, as it wouldn't point to the line anyway.
         // The hyperlink on the heading should be sufficient and less confusing.
-        let mut wrote_hyperlink = false;
+        let mut hyperlink = false;
 
         if let Some(path) = self.path() {
             if self.config().hyperlink_pattern.is_line_dependent()
                 || !self.config().heading
             {
-                self.start_hyperlink(path, line_number, column)?;
-                wrote_hyperlink = true;
+                hyperlink = self.start_hyperlink(path, line_number, column)?;
             }
         }
         if !self.config().heading {
@@ -1254,7 +1253,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         if self.config().byte_offset {
             self.write_byte_offset(absolute_byte_offset, sep)?;
         }
-        if wrote_hyperlink {
+        if hyperlink {
             self.end_hyperlink()?;
         }
         Ok(())
@@ -1566,7 +1565,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         path: &PrinterPath,
         line_number: Option<u64>,
         column: Option<u64>,
-    ) -> io::Result<()> {
+    ) -> io::Result<bool> {
         let mut wtr = self.wtr().borrow_mut();
         if wtr.supports_hyperlinks() {
             let mut buf = self.buf().borrow_mut();
@@ -1577,9 +1576,10 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
                 &mut buf,
             ) {
                 wtr.set_hyperlink(&spec)?;
+                return Ok(true);
             }
         }
-        Ok(())
+        Ok(false)
     }
 
     fn end_hyperlink(&self) -> io::Result<()> {

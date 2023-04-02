@@ -581,7 +581,7 @@ impl<'p, 's, M: Matcher, W: WriteColor> SummarySink<'p, 's, M, W> {
     /// (color and hyperlink).
     fn write_path(&mut self) -> io::Result<()> {
         if let Some(ref path) = self.path {
-            let mut wrote_hyperlink = false;
+            let mut hyperlink = false;
             if self.summary.wtr.borrow_mut().supports_hyperlinks() {
                 if let Some(spec) = path.hyperlink(
                     &self.summary.config.hyperlink_pattern,
@@ -590,7 +590,7 @@ impl<'p, 's, M: Matcher, W: WriteColor> SummarySink<'p, 's, M, W> {
                     &mut self.summary.buf,
                 ) {
                     self.summary.wtr.borrow_mut().set_hyperlink(&spec)?;
-                    wrote_hyperlink = true;
+                    hyperlink = true;
                 }
             }
 
@@ -599,7 +599,7 @@ impl<'p, 's, M: Matcher, W: WriteColor> SummarySink<'p, 's, M, W> {
                 path.as_bytes(),
             )?;
 
-            if wrote_hyperlink {
+            if hyperlink {
                 self.summary
                     .wtr
                     .borrow_mut()

@@ -103,7 +103,7 @@ impl<W: WriteColor> PathPrinter<W> {
         if !self.wtr.supports_color() {
             self.wtr.write_all(ppath.as_bytes())?;
         } else {
-            let mut wrote_hyperlink = false;
+            let mut hyperlink = false;
             if self.wtr.supports_hyperlinks() {
                 if let Some(spec) = ppath.hyperlink(
                     &self.config.hyperlink_pattern,
@@ -112,7 +112,7 @@ impl<W: WriteColor> PathPrinter<W> {
                     &mut self.buf,
                 ) {
                     self.wtr.set_hyperlink(&spec)?;
-                    wrote_hyperlink = true;
+                    hyperlink = true;
                 }
             }
 
@@ -120,7 +120,7 @@ impl<W: WriteColor> PathPrinter<W> {
             self.wtr.write_all(ppath.as_bytes())?;
             self.wtr.reset()?;
 
-            if wrote_hyperlink {
+            if hyperlink {
                 self.wtr.set_hyperlink(&HyperlinkSpec::none())?;
             }
         }
