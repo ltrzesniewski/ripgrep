@@ -8,12 +8,13 @@ use std::str::FromStr;
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct HyperlinkPattern {
     parts: Vec<Part>,
+    is_line_dependent: bool,
 }
 
 /// A hyperlink pattern part.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum Part {
-    /// Static text. Can include invariant placeholders such as the hostname.
+    /// Static text. Can include invariant values such as the hostname.
     Text(Vec<u8>),
     /// Placeholder for the file path.
     File,
@@ -30,8 +31,13 @@ pub enum HyperlinkPatternError {
     InvalidSyntax,
     /// This occurs when the {file} placeholder is missing.
     NoFilePlaceholder,
+    /// This occurs when the {line} placeholder is missing,
+    /// while the {column} placeholder is present.
+    NoLinePlaceholder,
     /// This occurs when an unknown placeholder is used.
     InvalidPlaceholder(String),
+    /// The pattern doesn't start with a valid scheme.
+    InvalidScheme,
 }
 
 /// The values to replace the pattern placeholders with.
@@ -45,7 +51,7 @@ pub struct HyperlinkValues<'a> {
 impl HyperlinkPattern {
     /// Creates an empty hyperlink pattern.
     pub fn new() -> Self {
-        HyperlinkPattern { parts: Vec::new() }
+        HyperlinkPattern::default()
     }
 
     /// Creates a default pattern suitable for Unix.
@@ -95,12 +101,21 @@ impl HyperlinkPattern {
     }
 
     fn append_placeholder(&mut self, part: Part) {
+        if part == Part::Line {
+            self.is_line_dependent = true;
+        }
+
         self.parts.push(part);
     }
 
     /// Returns true if this pattern is empty.
     pub fn is_empty(&self) -> bool {
         self.parts.is_empty()
+    }
+
+    /// Returns true if the pattern can produce line-dependent hyperlinks.
+    pub fn is_line_dependent(&self) -> bool {
+        self.is_line_dependent
     }
 
     /// Renders this pattern with the given values to the given output.
@@ -110,9 +125,48 @@ impl HyperlinkPattern {
         output: &mut impl Write,
     ) -> std::io::Result<()> {
         for part in &self.parts {
-            part.render(values, output)?
+            part.render(values, output)?;
         }
         Ok(())
+    }
+
+    /// Validate that the pattern is well-formed.
+    fn validate(&self) -> Result<(), HyperlinkPatternError> {
+        if self.parts.is_empty() {
+            return Ok(());
+        }
+
+        if !self.parts.contains(&Part::File) {
+            return Err(HyperlinkPatternError::NoFilePlaceholder);
+        }
+
+        if !self.is_line_dependent() && self.parts.contains(&Part::Column) {
+            return Err(HyperlinkPatternError::NoLinePlaceholder);
+        }
+
+        self.validate_scheme()
+    }
+
+    /// Validate that the pattern starts with a valid scheme.
+    ///
+    /// A valid scheme starts with an alphabetic character, continues with
+    /// a sequence of alphanumeric characters, periods, hyphens or plus signs,
+    /// and ends with a colon.
+    fn validate_scheme(&self) -> Result<(), HyperlinkPatternError> {
+        if let Some(Part::Text(value)) = self.parts.first() {
+            if let Some(colon_index) = value.find_byte(b':') {
+                if value[0].is_ascii_alphabetic()
+                    && value.iter().take(colon_index).all(|c| {
+                        c.is_ascii_alphanumeric()
+                            || matches!(c, b'.' | b'-' | b'+')
+                    })
+                {
+                    return Ok(());
+                }
+            }
+        }
+
+        Err(HyperlinkPatternError::InvalidScheme)
     }
 }
 
@@ -155,10 +209,7 @@ impl FromStr for HyperlinkPattern {
             }
         }
 
-        if !pattern.parts.is_empty() && !pattern.parts.contains(&Part::File) {
-            return Err(HyperlinkPatternError::NoFilePlaceholder);
-        }
-
+        pattern.validate()?;
         Ok(pattern)
     }
 }
@@ -204,6 +255,10 @@ impl Display for HyperlinkPatternError {
             HyperlinkPatternError::NoFilePlaceholder => {
                 write!(f, "the {{file}} placeholder is required in hyperlink patterns.")
             }
+            HyperlinkPatternError::NoLinePlaceholder => {
+                write!(f, "the hyperlink pattern contains a {{column}} placeholder, \
+                    but no {{line}} placeholder is present.")
+            }
             HyperlinkPatternError::InvalidPlaceholder(name) => {
                 write!(
                     f,
@@ -211,6 +266,9 @@ impl Display for HyperlinkPatternError {
                         file, line, column, host.",
                     name
                 )
+            }
+            HyperlinkPatternError::InvalidScheme => {
+                write!(f, "the hyperlink pattern must start with a valid URL scheme.")
             }
         }
     }
@@ -266,7 +324,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_different_cases() {
+    fn parse_valid() {
+        assert!(HyperlinkPattern::from_str("").unwrap().parts.is_empty());
         assert_eq!(
             HyperlinkPattern::from_str("foo://{file}").unwrap().to_string(),
             "foo://{file}"
@@ -277,6 +336,15 @@ mod tests {
                 .to_string(),
             "foo://{file}/bar"
         );
+
+        HyperlinkPattern::from_str("f://{file}").unwrap();
+        HyperlinkPattern::from_str("f:{file}").unwrap();
+        HyperlinkPattern::from_str("f-+.:{file}").unwrap();
+        HyperlinkPattern::from_str("f42:{file}").unwrap();
+    }
+
+    #[test]
+    fn parse_invalid() {
         assert_eq!(
             HyperlinkPattern::from_str("foo://bar").unwrap_err(),
             HyperlinkPatternError::NoFilePlaceholder
@@ -289,6 +357,21 @@ mod tests {
             HyperlinkPattern::from_str("foo://{file").unwrap_err(),
             HyperlinkPatternError::InvalidSyntax
         );
-        assert!(HyperlinkPattern::from_str("").unwrap().parts.is_empty());
+        assert_eq!(
+            HyperlinkPattern::from_str("foo://{file}:{column}").unwrap_err(),
+            HyperlinkPatternError::NoLinePlaceholder
+        );
+        assert_eq!(
+            HyperlinkPattern::from_str("{file}").unwrap_err(),
+            HyperlinkPatternError::InvalidScheme
+        );
+        assert_eq!(
+            HyperlinkPattern::from_str(":{file}").unwrap_err(),
+            HyperlinkPatternError::InvalidScheme
+        );
+        assert_eq!(
+            HyperlinkPattern::from_str("f*:{file}").unwrap_err(),
+            HyperlinkPatternError::InvalidScheme
+        );
     }
 }

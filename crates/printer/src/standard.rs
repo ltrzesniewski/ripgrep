@@ -1227,8 +1227,18 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     ) -> io::Result<()> {
         let sep = self.separator_field();
 
+        // If a heading was written, and the hyperlink pattern is invariant on the line number,
+        // then don't hyperlink each line prelude, as it wouldn't point to the line anyway.
+        // The hyperlink on the heading should be sufficient and less confusing.
+        let mut wrote_hyperlink = false;
+
         if let Some(path) = self.path() {
-            self.start_hyperlink(path, line_number, column)?;
+            if self.config().hyperlink_pattern.is_line_dependent()
+                || !self.config().heading
+            {
+                self.start_hyperlink(path, line_number, column)?;
+                wrote_hyperlink = true;
+            }
         }
         if !self.config().heading {
             self.write_path_field(sep)?;
@@ -1244,7 +1254,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         if self.config().byte_offset {
             self.write_byte_offset(absolute_byte_offset, sep)?;
         }
-        if self.path().is_some() {
+        if wrote_hyperlink {
             self.end_hyperlink()?;
         }
         Ok(())
