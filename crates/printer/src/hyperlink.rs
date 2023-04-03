@@ -4,6 +4,7 @@ use std::error::Error;
 use std::fmt::Display;
 use std::io;
 use std::io::Write;
+use std::path::Path;
 use std::str::FromStr;
 use termcolor::{HyperlinkSpec, WriteColor};
 
@@ -44,12 +45,18 @@ pub enum HyperlinkPatternError {
 }
 
 /// The values to replace the pattern placeholders with.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct HyperlinkValues<'a> {
-    file: &'a [u8],
+    file: &'a HyperlinkPath,
     line: u64,
     column: u64,
 }
+
+/// Represents the {file} part of a hyperlink.
+///
+/// This is the value to use as-is in the hyperlink, converted from an OS file path.
+#[derive(Clone, Debug)]
+pub struct HyperlinkPath(Vec<u8>);
 
 impl HyperlinkPattern {
     /// Creates an empty hyperlink pattern.
@@ -237,7 +244,7 @@ impl Part {
     ) -> io::Result<()> {
         match self {
             Part::Text(text) => output.write_all(text),
-            Part::File => output.write_all(values.file),
+            Part::File => output.write_all(&values.file.0),
             Part::Line => write!(output, "{}", values.line),
             Part::Column => write!(output, "{}", values.column),
         }
@@ -288,7 +295,7 @@ impl Error for HyperlinkPatternError {}
 impl<'a> HyperlinkValues<'a> {
     /// Creates a new set of hyperlink values.
     pub fn new(
-        file: &'a [u8],
+        file: &'a HyperlinkPath,
         line: Option<u64>,
         column: Option<u64>,
     ) -> Self {
@@ -297,6 +304,98 @@ impl<'a> HyperlinkValues<'a> {
             line: line.unwrap_or(1),
             column: column.unwrap_or(1),
         }
+    }
+}
+
+impl HyperlinkPath {
+    /// Returns a hyperlink path from an OS path.
+    #[cfg(unix)]
+    pub fn from_path(path: &Path) -> Option<Self> {
+        // On Unix, this function returns the absolute file path without the leading slash,
+        // as it makes for more natural hyperlink patterns, for instance:
+        //   file://{host}/{file}   instead of   file://{host}{file}
+        //   vscode://file/{file}   instead of   vscode://file{file}
+        // It also allows for the VSCode pattern to be multi-platform.
+
+        let path = path.canonicalize().ok()?;
+        let path = path.to_str()?.as_bytes();
+        let path = if path.starts_with(b"/") { &path[1..] } else { path };
+        Some(Self(path.to_vec()))
+    }
+
+    /// Returns a hyperlink path from an OS path.
+    #[cfg(windows)]
+    pub fn from_path(path: &Path) -> Option<Self> {
+        // On Windows, Path::canonicalize returns the result of
+        // GetFinalPathNameByHandleW with VOLUME_NAME_DOS,
+        // which produces paths such as the following:
+        //   \\?\C:\dir\file.txt           (local path)
+        //   \\?\UNC\server\dir\file.txt   (network share)
+        //
+        // The \\?\ prefix comes from VOLUME_NAME_DOS and is constant.
+        // It is followed either by the drive letter, or by UNC\
+        // (universal naming convention), which denotes a network share.
+        //
+        // Given that the default URL pattern on Windows is file:///{file}
+        // we need to return the following from this function:
+        //   C:/dir/file.txt        (local path)
+        //   /server/dir/file.txt   (network share)
+        //
+        // Which produces the following links:
+        //   file:///C:/dir/file.txt        (local path)
+        //   file:////server/dir/file.txt   (network share)
+        //
+        // This substitutes the {file} placeholder with the expected value
+        // for the most common DOS paths, but on the other hand,
+        // network paths start with a single slash, which may be unexpected.
+        // It produces correct URLs though.
+        //
+        // Note that the following URL syntax is also valid for network shares:
+        //   file://server/dir/file.txt
+        // It is also more consistent with the Unix case, but in order to
+        // use it, the pattern would have to be file://{file} and
+        // the {file} placeholder would have to be replaced with
+        //   /C:/dir/file.txt
+        // for local files, which is not ideal, and it is certainly unexpected.
+        //
+        // Also note that the file://C:/dir/file.txt syntax is not correct,
+        // even though it often works in practice.
+        //
+        // In the end, this choice was confirmed by VSCode, whose pattern
+        // is vscode://file/{file}:{line}:{column} and which correctly understands
+        // the following URL format for network drives:
+        //   vscode://file//server/dir/file.txt:1:1
+        // It doesn't parse any other number of slashes in "file//server" as a network path.
+
+        const WIN32_NAMESPACE_PREFIX: &[u8] = br"\\?\";
+        const UNC_PREFIX: &[u8] = br"UNC\";
+
+        let path = path.canonicalize().ok()?;
+        let mut path = path.to_str()?.as_bytes();
+
+        if path.starts_with(WIN32_NAMESPACE_PREFIX) {
+            path = &path[WIN32_NAMESPACE_PREFIX.len()..];
+
+            if path.starts_with(UNC_PREFIX) {
+                path = &path[(UNC_PREFIX.len() - 1)..];
+            }
+        } else {
+            return None;
+        }
+
+        Some(Self(
+            path.iter().map(|&b| if b == b'\\' { b'/' } else { b }).collect(),
+        ))
+    }
+}
+
+impl Display for HyperlinkPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            std::str::from_utf8(&self.0).unwrap_or("invalid utf-8")
+        )
     }
 }
 
