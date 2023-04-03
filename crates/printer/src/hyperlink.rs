@@ -320,7 +320,7 @@ impl HyperlinkPath {
         let path = path.canonicalize().ok()?;
         let path = path.to_str()?.as_bytes();
         let path = if path.starts_with(b"/") { &path[1..] } else { path };
-        Some(Self(path.to_vec()))
+        Some(Self::encode(path))
     }
 
     /// Returns a hyperlink path from an OS path.
@@ -383,9 +383,29 @@ impl HyperlinkPath {
             return None;
         }
 
-        Some(Self(
-            path.iter().map(|&b| if b == b'\\' { b'/' } else { b }).collect(),
+        Some(Self::encode(
+            path.iter()
+                .map(|&b| if b == b'\\' { b'/' } else { b })
+                .collect::<Vec<_>>()
+                .as_bytes(),
         ))
+    }
+
+    fn encode(input: &[u8]) -> HyperlinkPath {
+        const SET_TO_ENCODE: &percent_encoding::AsciiSet =
+            &percent_encoding::NON_ALPHANUMERIC
+                .remove(b'/')
+                .remove(b':')
+                .remove(b'_')
+                .remove(b'-')
+                .remove(b'.')
+                .remove(b'~');
+
+        Self(
+            percent_encoding::percent_encode(input, SET_TO_ENCODE)
+                .flat_map(|i| i.bytes())
+                .collect(),
+        )
     }
 }
 

@@ -217,6 +217,7 @@ dependencies = [
  "grep-searcher",
  "lazy_static",
  "once_cell",
+ "percent-encoding",
  "serde",
  "serde_json",
  "termcolor",
@@ -391,6 +392,12 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
+
+[[package]]
+name = "percent-encoding"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
 name = "pkg-config"
