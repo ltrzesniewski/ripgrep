@@ -320,7 +320,7 @@ impl HyperlinkPath {
         let path = path.canonicalize().ok()?;
         let path = path.to_str()?.as_bytes();
         let path = if path.starts_with(b"/") { &path[1..] } else { path };
-        Some(Self(path.to_vec()))
+        Some(Self::encode(path))
     }
 
     /// Returns a hyperlink path from an OS path.
@@ -383,9 +383,51 @@ impl HyperlinkPath {
             return None;
         }
 
-        Some(Self(
-            path.iter().map(|&b| if b == b'\\' { b'/' } else { b }).collect(),
-        ))
+        Some(Self::encode(path))
+    }
+
+    /// Percent-encodes a path.
+    ///
+    /// The alphanumeric ASCII characters and "-", ".", "_", "~" are unreserved
+    /// as per section 2.3 of RFC 3986 (Uniform Resource Identifier (URI): Generic Syntax),
+    /// and are not encoded. The other ASCII characters except "/" and ":" are percent-encoded,
+    /// and "\" is replaced by "/" on Windows.
+    ///
+    /// Section 4 of RFC 8089 (The "file" URI Scheme) does not mandate precise encoding
+    /// requirements for non-ASCII characters, and this implementation leaves them unencoded.
+    /// On Windows, the UrlCreateFromPath function does not encode non-ASCII characters.
+    /// Doing so with UTF-8 encoded paths creates invalid file:// URLs on that platform.
+    fn encode(input: &[u8]) -> HyperlinkPath {
+        let mut result = Vec::with_capacity(input.len());
+
+        for &c in input {
+            match c {
+                b'0'..=b'9'
+                | b'A'..=b'Z'
+                | b'a'..=b'z'
+                | b'/'
+                | b':'
+                | b'-'
+                | b'.'
+                | b'_'
+                | b'~'
+                | 128.. => {
+                    result.push(c);
+                }
+                #[cfg(windows)]
+                b'\\' => {
+                    result.push(b'/');
+                }
+                _ => {
+                    const HEX: &[u8] = b"0123456789ABCDEF";
+                    result.push(b'%');
+                    result.push(HEX[(c >> 4) as usize]);
+                    result.push(HEX[(c & 0xF) as usize]);
+                }
+            }
+        }
+
+        Self(result)
     }
 }
 
