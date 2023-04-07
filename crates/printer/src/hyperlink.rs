@@ -383,29 +383,46 @@ impl HyperlinkPath {
             return None;
         }
 
-        Some(Self::encode(
-            path.iter()
-                .map(|&b| if b == b'\\' { b'/' } else { b })
-                .collect::<Vec<_>>()
-                .as_bytes(),
-        ))
+        Some(Self::encode(path))
     }
 
     fn encode(input: &[u8]) -> HyperlinkPath {
-        const SET_TO_ENCODE: &percent_encoding::AsciiSet =
-            &percent_encoding::NON_ALPHANUMERIC
-                .remove(b'/')
-                .remove(b':')
-                .remove(b'_')
-                .remove(b'-')
-                .remove(b'.')
-                .remove(b'~');
+        // The ASCII alphanumeric characters and "-", ".", "_", "~"
+        // are unreserved as per section 2.3 of RFC 3986 (URI Syntax).
+        // Additionally, RFC 8089 ("file" Scheme), does not specify
+        // encoding requirements. Passing non-ASCII characters as-is
+        // seems to work best. Other ASCII characters are percent-encoded.
 
-        Self(
-            percent_encoding::percent_encode(input, SET_TO_ENCODE)
-                .flat_map(|i| i.bytes())
-                .collect(),
-        )
+        let mut result = Vec::with_capacity(input.len());
+
+        for &c in input {
+            match c {
+                b'0'..=b'9'
+                | b'A'..=b'Z'
+                | b'a'..=b'z'
+                | b'/'
+                | b':'
+                | b'-'
+                | b'.'
+                | b'_'
+                | b'~'
+                | 128.. => {
+                    result.push(c);
+                }
+                #[cfg(windows)]
+                b'\\' => {
+                    result.push(b'/');
+                }
+                _ => {
+                    const HEX: &[u8] = b"0123456789ABCDEF";
+                    result.push(b'%');
+                    result.push(HEX[(c >> 4) as usize]);
+                    result.push(HEX[(c & 0xF) as usize]);
+                }
+            }
+        }
+
+        Self(result)
     }
 }
 
