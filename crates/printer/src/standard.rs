@@ -1227,18 +1227,9 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     ) -> io::Result<()> {
         let sep = self.separator_field();
 
-        // If a heading was written, and the hyperlink pattern is invariant on the line number,
-        // then don't hyperlink each line prelude, as it wouldn't point to the line anyway.
-        // The hyperlink on the heading should be sufficient and less confusing.
-        let mut hyperlink = HyperlinkSpan::default();
+        let mut hyperlink =
+            self.start_prelude_hyperlink_span(line_number, column)?;
 
-        if let Some(path) = self.path() {
-            if self.config().hyperlink_pattern.is_line_dependent()
-                || !self.config().heading
-            {
-                hyperlink = self.start_hyperlink(path, line_number, column)?;
-            }
-        }
         if !self.config().heading {
             self.write_path_field(sep)?;
         }
@@ -1257,6 +1248,30 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
             hyperlink.end(&mut *self.wtr().borrow_mut())?;
         }
         Ok(())
+    }
+
+    /// Starts a hyperlink span for a line prelude when applicable.
+    ///
+    /// If a heading was written, and the hyperlink pattern is invariant on the line number,
+    /// then this doesn't hyperlink each line prelude, as it wouldn't point to the line anyway.
+    /// The hyperlink on the heading should be sufficient and less confusing.
+    fn start_prelude_hyperlink_span(
+        &self,
+        line_number: Option<u64>,
+        column: Option<u64>,
+    ) -> io::Result<HyperlinkSpan> {
+        if let Some(path) = self.path() {
+            if self.config().hyperlink_pattern.is_line_dependent()
+                || !self.config().heading
+            {
+                return Ok(self.start_hyperlink_span(
+                    path,
+                    line_number,
+                    column,
+                )?);
+            }
+        }
+        Ok(HyperlinkSpan::default())
     }
 
     #[inline(always)]
@@ -1555,12 +1570,12 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     }
 
     fn write_path_hyperlink(&self, path: &PrinterPath) -> io::Result<()> {
-        let mut hyperlink = self.start_hyperlink(path, None, None)?;
+        let mut hyperlink = self.start_hyperlink_span(path, None, None)?;
         self.write_path(path)?;
         hyperlink.end(&mut *self.wtr().borrow_mut())
     }
 
-    fn start_hyperlink(
+    fn start_hyperlink_span(
         &self,
         path: &PrinterPath,
         line_number: Option<u64>,
@@ -1569,7 +1584,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         let mut wtr = self.wtr().borrow_mut();
         if wtr.supports_hyperlinks() {
             let mut buf = self.buf().borrow_mut();
-            if let Some(spec) = path.create_hyperlink(
+            if let Some(spec) = path.create_hyperlink_spec(
                 &self.config().hyperlink_pattern,
                 line_number,
                 column,

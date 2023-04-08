@@ -1505,7 +1505,7 @@ fn flag_hyperlink_format(args: &mut Vec<RGArg>) {
         "\
 Set the format of hyperlinks to match results. This defines a pattern which
 can contain the following placeholders: {file}, {line}, {column}, and {host}.
-An empty format disables hyperlinks.
+An empty pattern or 'none' disables hyperlinks.
 
 The {file} placeholder is required, and will be replaced with the absolute
 file path with a few adjustments: The leading '/' on Unix is removed,

@@ -580,25 +580,12 @@ impl<'p, 's, M: Matcher, W: WriteColor> SummarySink<'p, 's, M, W> {
     /// write that path to the underlying writer in the appropriate style
     /// (color and hyperlink).
     fn write_path(&mut self) -> io::Result<()> {
-        if let Some(ref path) = self.path {
-            let mut hyperlink = HyperlinkSpan::default();
-            if self.summary.wtr.borrow_mut().supports_hyperlinks() {
-                if let Some(spec) = path.create_hyperlink(
-                    &self.summary.config.hyperlink_pattern,
-                    None,
-                    None,
-                    &mut self.summary.buf,
-                ) {
-                    hyperlink = HyperlinkSpan::start(
-                        &mut *self.summary.wtr.borrow_mut(),
-                        &spec,
-                    )?;
-                }
-            }
+        if self.path.is_some() {
+            let mut hyperlink = self.start_hyperlink_span()?;
 
             self.write_spec(
                 self.summary.config.colors.path(),
-                path.as_bytes(),
+                self.path.as_ref().unwrap().as_bytes(),
             )?;
 
             if hyperlink.is_active() {
@@ -606,6 +593,24 @@ impl<'p, 's, M: Matcher, W: WriteColor> SummarySink<'p, 's, M, W> {
             }
         }
         Ok(())
+    }
+
+    /// Starts a hyperlink span when applicable.
+    fn start_hyperlink_span(&mut self) -> io::Result<HyperlinkSpan> {
+        if let Some(ref path) = self.path {
+            let mut wtr = self.summary.wtr.borrow_mut();
+            if wtr.supports_hyperlinks() {
+                if let Some(spec) = path.create_hyperlink_spec(
+                    &self.summary.config.hyperlink_pattern,
+                    None,
+                    None,
+                    &mut self.summary.buf,
+                ) {
+                    return Ok(HyperlinkSpan::start(&mut *wtr, &spec)?);
+                }
+            }
+        }
+        Ok(HyperlinkSpan::default())
     }
 
     /// Write the line terminator configured on the given searcher.

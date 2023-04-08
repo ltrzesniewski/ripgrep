@@ -89,11 +89,12 @@ impl HyperlinkPatternBuilder {
     ///
     /// On WSL, appends `wsl$/{distro}` instead.
     pub fn append_hostname(&mut self) -> &mut Self {
-        self.append_text(Self::get_hostname().as_bytes());
-        self
+        self.append_text(Self::get_hostname().as_bytes())
     }
 
-    /// Returns the hostname to use for the host placeholder.
+    /// Returns the hostname to use in the pattern.
+    ///
+    /// On WSL, returns `wsl$/{distro}`.
     fn get_hostname() -> String {
         if cfg!(unix) {
             if let Ok(mut wsl_distro) = std::env::var("WSL_DISTRO_NAME") {
@@ -243,11 +244,7 @@ impl FromStr for HyperlinkPattern {
             input = HYPERLINK_PATTERN_ALIASES[index].1.as_bytes();
         }
 
-        loop {
-            if input.is_empty() {
-                break;
-            }
-
+        while !input.is_empty() {
             if input[0] == b'{' {
                 // Placeholder
                 let end = input
@@ -315,25 +312,28 @@ impl Display for HyperlinkPatternError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HyperlinkPatternError::InvalidSyntax => {
-                write!(f, "invalid hyperlink pattern syntax.")
+                write!(f, "invalid hyperlink pattern syntax")
             }
             HyperlinkPatternError::NoFilePlaceholder => {
-                write!(f, "the {{file}} placeholder is required in hyperlink patterns.")
+                write!(f, "the {{file}} placeholder is required in hyperlink patterns")
             }
             HyperlinkPatternError::NoLinePlaceholder => {
                 write!(f, "the hyperlink pattern contains a {{column}} placeholder, \
-                    but no {{line}} placeholder is present.")
+                    but no {{line}} placeholder is present")
             }
             HyperlinkPatternError::InvalidPlaceholder(name) => {
                 write!(
                     f,
-                    "invalid hyperlink pattern placeholder: '{}'. Choose from: \
-                        file, line, column, host.",
+                    "invalid hyperlink pattern placeholder: '{}', choose from: \
+                        file, line, column, host",
                     name
                 )
             }
             HyperlinkPatternError::InvalidScheme => {
-                write!(f, "the hyperlink pattern must start with a valid URL scheme.")
+                write!(
+                    f,
+                    "the hyperlink pattern must start with a valid URL scheme"
+                )
             }
         }
     }
@@ -364,7 +364,7 @@ impl HyperlinkPath {
         // as it makes for more natural hyperlink patterns, for instance:
         //   file://{host}/{file}   instead of   file://{host}{file}
         //   vscode://file/{file}   instead of   vscode://file{file}
-        // It also allows for the VSCode pattern to be multi-platform.
+        // It also allows for patterns to be multi-platform.
 
         let path = path.canonicalize().ok()?;
         let path = path.to_str()?.as_bytes();
@@ -444,7 +444,7 @@ impl HyperlinkPath {
     ///
     /// Section 4 of RFC 8089 (The "file" URI Scheme) does not mandate precise encoding
     /// requirements for non-ASCII characters, and this implementation leaves them unencoded.
-    /// On Windows, the UrlCreateFromPath function does not encode non-ASCII characters.
+    /// On Windows, the UrlCreateFromPathW function does not encode non-ASCII characters.
     /// Doing so with UTF-8 encoded paths creates invalid file:// URLs on that platform.
     fn encode(input: &[u8]) -> HyperlinkPath {
         let mut result = Vec::with_capacity(input.len());
@@ -531,22 +531,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn combine_text_parts() {
+    fn build_pattern() {
         let pattern = HyperlinkPatternBuilder::new()
             .append_text(b"foo://")
-            .append_text(b"bar")
+            .append_text(b"bar-")
             .append_text(b"baz")
             .append_file()
             .build()
             .unwrap();
 
-        assert_eq!(pattern.to_string(), "foo://barbaz{file}");
-        assert_eq!(pattern.parts.len(), 2);
+        assert_eq!(pattern.to_string(), "foo://bar-baz{file}");
+        assert_eq!(pattern.parts[0], Part::Text(b"foo://bar-baz".to_vec()));
+        assert!(!pattern.is_empty());
+    }
+
+    #[test]
+    fn build_empty_pattern() {
+        let pattern = HyperlinkPatternBuilder::new().build().unwrap();
+
+        assert!(pattern.is_empty());
+        assert_eq!(pattern, HyperlinkPattern::empty());
+        assert_eq!(pattern, HyperlinkPattern::default());
     }
 
     #[test]
     fn handle_alias() {
         assert!(HyperlinkPattern::from_str("file").is_ok());
+        assert!(HyperlinkPattern::from_str("none").is_ok());
+        assert!(HyperlinkPattern::from_str("none").unwrap().is_empty());
     }
 
     #[test]
@@ -555,6 +567,7 @@ mod tests {
             "foo://{host}/bar/{file}:{line}:{column}",
         )
         .unwrap();
+
         assert_eq!(
             pattern.to_string(),
             "foo://{host}/bar/{file}:{line}:{column}"
@@ -563,11 +576,12 @@ mod tests {
         assert_eq!(pattern.parts.len(), 6);
         assert!(pattern.parts.contains(&Part::File));
         assert!(pattern.parts.contains(&Part::Line));
+        assert!(pattern.parts.contains(&Part::Column));
     }
 
     #[test]
     fn parse_valid() {
-        assert!(HyperlinkPattern::from_str("").unwrap().parts.is_empty());
+        assert!(HyperlinkPattern::from_str("").unwrap().is_empty());
         assert_eq!(
             HyperlinkPattern::from_str("foo://{file}").unwrap().to_string(),
             "foo://{file}"

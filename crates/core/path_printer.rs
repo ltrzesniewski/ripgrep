@@ -105,24 +105,30 @@ impl<W: WriteColor> PathPrinter<W> {
         if !self.wtr.supports_color() {
             self.wtr.write_all(ppath.as_bytes())?;
         } else {
-            let mut hyperlink = HyperlinkSpan::default();
-            if self.wtr.supports_hyperlinks() {
-                if let Some(spec) = ppath.create_hyperlink(
-                    &self.config.hyperlink_pattern,
-                    None,
-                    None,
-                    &mut self.buf,
-                ) {
-                    hyperlink = HyperlinkSpan::start(&mut self.wtr, &spec)?;
-                }
-            }
-
+            let mut hyperlink = self.start_hyperlink_span(&ppath)?;
             self.wtr.set_color(self.config.colors.path())?;
             self.wtr.write_all(ppath.as_bytes())?;
             self.wtr.reset()?;
-
             hyperlink.end(&mut self.wtr)?;
         }
         self.wtr.write_all(&[self.config.terminator])
+    }
+
+    /// Starts a hyperlink span when applicable.
+    fn start_hyperlink_span(
+        &mut self,
+        path: &PrinterPath,
+    ) -> io::Result<HyperlinkSpan> {
+        if self.wtr.supports_hyperlinks() {
+            if let Some(spec) = path.create_hyperlink_spec(
+                &self.config.hyperlink_pattern,
+                None,
+                None,
+                &mut self.buf,
+            ) {
+                return Ok(HyperlinkSpan::start(&mut self.wtr, &spec)?);
+            }
+        }
+        Ok(HyperlinkSpan::default())
     }
 }

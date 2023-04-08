@@ -333,7 +333,7 @@ impl<'a> PrinterPath<'a> {
 
     /// Creates a hyperlink for this path and the given line and column, using the specified
     /// pattern. Uses the given buffer to store the hyperlink.
-    pub fn create_hyperlink<'b>(
+    pub fn create_hyperlink_spec<'b>(
         &self,
         pattern: &HyperlinkPattern,
         line_number: Option<u64>,
