@@ -1140,7 +1140,7 @@ impl ArgMatches {
     fn hyperlink_pattern(&self) -> Result<HyperlinkPattern> {
         Ok(match self.value_of_lossy("hyperlink-format") {
             Some(pattern) => HyperlinkPattern::from_str(&pattern)?,
-            None => HyperlinkPattern::new_system_default(),
+            None => HyperlinkPattern::default_file_scheme(),
         })
     }
 

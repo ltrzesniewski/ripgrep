@@ -8,7 +8,18 @@ use std::path::Path;
 use std::str::FromStr;
 use termcolor::{HyperlinkSpec, WriteColor};
 
+/// A builder for `HyperlinkPattern`.
+///
+/// Once a `HyperlinkPattern` is built, it is immutable.
+#[derive(Debug)]
+pub struct HyperlinkPatternBuilder {
+    parts: Vec<Part>,
+}
+
 /// A hyperlink pattern with placeholders.
+///
+/// This can be created with `HyperlinkPatternBuilder` or from a string
+/// using `HyperlinkPattern::from_str`.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct HyperlinkPattern {
     parts: Vec<Part>,
@@ -58,86 +69,68 @@ pub struct HyperlinkValues<'a> {
 #[derive(Clone, Debug)]
 pub struct HyperlinkPath(Vec<u8>);
 
-impl HyperlinkPattern {
-    /// Creates an empty hyperlink pattern.
+impl HyperlinkPatternBuilder {
+    /// Creates a new hyperlink pattern builder.
     pub fn new() -> Self {
-        HyperlinkPattern::default()
+        Self { parts: vec![] }
     }
 
-    /// Creates a default pattern suitable for Unix.
-    ///
-    /// The returned pattern is: `file://{host}/{file}`  
-    /// except on WSL, where it is: `file://wsl$/{distro}/{file}`
-    #[cfg(unix)]
-    pub fn new_system_default() -> Self {
-        let mut pattern = Self::new();
-        pattern.append_text(b"file://");
-
-        if let Ok(wsl_distro) = std::env::var("WSL_DISTRO_NAME") {
-            pattern.append_text(b"wsl$/");
-            pattern.append_text(wsl_distro.as_bytes());
-        } else {
-            pattern.append_hostname();
-        }
-
-        pattern.append_text(b"/");
-        pattern.append_placeholder(Part::File);
-        pattern
-    }
-
-    /// Creates a default pattern suitable for Windows.
-    ///
-    /// The returned pattern is: `file:///{file}`
-    #[cfg(windows)]
-    pub fn new_system_default() -> Self {
-        let mut pattern = Self::new();
-        pattern.append_text(b"file:///");
-        pattern.append_placeholder(Part::File);
-        pattern
-    }
-
-    fn append_text(&mut self, text: &[u8]) {
+    /// Appends static text.
+    pub fn append_text(&mut self, text: &[u8]) -> &mut Self {
         if let Some(Part::Text(contents)) = self.parts.last_mut() {
             contents.extend_from_slice(text);
         } else if !text.is_empty() {
             self.parts.push(Part::Text(text.to_vec()));
         }
+        self
     }
 
-    fn append_hostname(&mut self) {
-        self.append_text(
-            gethostname::gethostname().to_string_lossy().as_bytes(),
-        );
+    /// Appends the hostname.
+    ///
+    /// On WSL, appends `wsl$/{distro}` instead.
+    pub fn append_hostname(&mut self) -> &mut Self {
+        self.append_text(Self::get_hostname().as_bytes());
+        self
     }
 
-    fn append_placeholder(&mut self, part: Part) {
-        if part == Part::Line {
-            self.is_line_dependent = true;
+    /// Returns the hostname to use for the host placeholder.
+    fn get_hostname() -> String {
+        if cfg!(unix) {
+            if let Ok(mut wsl_distro) = std::env::var("WSL_DISTRO_NAME") {
+                wsl_distro.insert_str(0, "wsl$/");
+                return wsl_distro;
+            }
         }
 
-        self.parts.push(part);
+        gethostname::gethostname().to_string_lossy().to_string()
     }
 
-    /// Returns true if this pattern is empty.
-    pub fn is_empty(&self) -> bool {
-        self.parts.is_empty()
+    /// Appends a placeholder for the file path.
+    pub fn append_file(&mut self) -> &mut Self {
+        self.parts.push(Part::File);
+        self
     }
 
-    /// Returns true if the pattern can produce line-dependent hyperlinks.
-    pub fn is_line_dependent(&self) -> bool {
-        self.is_line_dependent
+    /// Appends a placeholder for the line number.
+    pub fn append_line(&mut self) -> &mut Self {
+        self.parts.push(Part::Line);
+        self
     }
 
-    /// Renders this pattern with the given values to the given output.
-    pub fn render(
-        &self,
-        values: &HyperlinkValues,
-        output: &mut impl Write,
-    ) -> io::Result<()> {
-        for part in &self.parts {
-            part.render(values, output)?;
-        }
-        Ok(())
+    /// Appends a placeholder for the column number.
+    pub fn append_column(&mut self) -> &mut Self {
+        self.parts.push(Part::Column);
+        self
+    }
+
+    /// Builds the pattern.
+    pub fn build(&self) -> Result<HyperlinkPattern, HyperlinkPatternError> {
+        self.validate()?;
+
+        Ok(HyperlinkPattern {
+            parts: self.parts.clone(),
+            is_line_dependent: self.parts.contains(&Part::Line),
+        })
     }
 
     /// Validate that the pattern is well-formed.
@@ -150,7 +143,9 @@ impl HyperlinkPattern {
             return Err(HyperlinkPatternError::NoFilePlaceholder);
         }
 
-        if !self.is_line_dependent() && self.parts.contains(&Part::Column) {
+        if self.parts.contains(&Part::Column)
+            && !self.parts.contains(&Part::Line)
+        {
             return Err(HyperlinkPatternError::NoLinePlaceholder);
         }
 
@@ -180,11 +175,66 @@ impl HyperlinkPattern {
     }
 }
 
+impl HyperlinkPattern {
+    /// Creates an empty hyperlink pattern.
+    pub fn empty() -> Self {
+        HyperlinkPattern::default()
+    }
+
+    /// Creates a default pattern suitable for Unix.
+    ///
+    /// The returned pattern is `file://{host}/{file}`
+    #[cfg(unix)]
+    pub fn default_file_scheme() -> Self {
+        HyperlinkPatternBuilder::new()
+            .append_text(b"file://")
+            .append_hostname()
+            .append_text(b"/")
+            .append_file()
+            .build()
+            .unwrap()
+    }
+
+    /// Creates a default pattern suitable for Windows.
+    ///
+    /// The returned pattern is `file:///{file}`
+    #[cfg(windows)]
+    pub fn default_file_scheme() -> Self {
+        HyperlinkPatternBuilder::new()
+            .append_text(b"file:///")
+            .append_file()
+            .build()
+            .unwrap()
+    }
+
+    /// Returns true if this pattern is empty.
+    pub fn is_empty(&self) -> bool {
+        self.parts.is_empty()
+    }
+
+    /// Returns true if the pattern can produce line-dependent hyperlinks.
+    pub fn is_line_dependent(&self) -> bool {
+        self.is_line_dependent
+    }
+
+    /// Renders this pattern with the given values to the given output.
+    pub fn render(
+        &self,
+        values: &HyperlinkValues,
+        output: &mut impl Write,
+    ) -> io::Result<()> {
+        for part in &self.parts {
+            part.render(values, output)?;
+        }
+        Ok(())
+    }
+}
+
 impl FromStr for HyperlinkPattern {
     type Err = HyperlinkPatternError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut pattern = Self::new();
+        let mut builder = HyperlinkPatternBuilder::new();
         let mut input = s.as_bytes();
 
         if let Ok(index) = HYPERLINK_PATTERN_ALIASES
@@ -205,28 +255,27 @@ impl FromStr for HyperlinkPattern {
                     .ok_or(HyperlinkPatternError::InvalidSyntax)?;
 
                 match &input[1..end] {
-                    b"file" => pattern.append_placeholder(Part::File),
-                    b"line" => pattern.append_placeholder(Part::Line),
-                    b"column" => pattern.append_placeholder(Part::Column),
-                    b"host" => pattern.append_hostname(),
+                    b"file" => builder.append_file(),
+                    b"line" => builder.append_line(),
+                    b"column" => builder.append_column(),
+                    b"host" => builder.append_hostname(),
                     other => {
                         return Err(HyperlinkPatternError::InvalidPlaceholder(
                             String::from_utf8_lossy(other).to_string(),
                         ))
                     }
-                }
+                };
 
                 input = &input[(end + 1)..];
             } else {
                 // Static text
                 let end = input.find_byte(b'{').unwrap_or(input.len());
-                pattern.append_text(&input[..end]);
+                builder.append_text(&input[..end]);
                 input = &input[end..];
             }
         }
 
-        pattern.validate()?;
-        Ok(pattern)
+        builder.build()
     }
 }
 
@@ -483,12 +532,16 @@ mod tests {
 
     #[test]
     fn combine_text_parts() {
-        let mut pattern = HyperlinkPattern::new();
-        pattern.append_text(b"foo");
-        pattern.append_text(b"bar");
-        pattern.append_text(b"baz");
-        assert_eq!(pattern.to_string(), "foobarbaz");
-        assert_eq!(pattern.parts.len(), 1);
+        let pattern = HyperlinkPatternBuilder::new()
+            .append_text(b"foo://")
+            .append_text(b"bar")
+            .append_text(b"baz")
+            .append_file()
+            .build()
+            .unwrap();
+
+        assert_eq!(pattern.to_string(), "foo://barbaz{file}");
+        assert_eq!(pattern.parts.len(), 2);
     }
 
     #[test]
@@ -504,10 +557,8 @@ mod tests {
         .unwrap();
         assert_eq!(
             pattern.to_string(),
-            "foo://{host}/bar/{file}:{line}:{column}".replace(
-                "{host}",
-                &gethostname::gethostname().to_string_lossy()
-            )
+            "foo://{host}/bar/{file}:{line}:{column}"
+                .replace("{host}", &HyperlinkPatternBuilder::get_hostname())
         );
         assert_eq!(pattern.parts.len(), 6);
         assert!(pattern.parts.contains(&Part::File));
