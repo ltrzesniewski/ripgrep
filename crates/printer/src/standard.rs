@@ -1225,53 +1225,25 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         line_number: Option<u64>,
         column: Option<u64>,
     ) -> io::Result<()> {
-        let sep = self.separator_field();
-
-        let mut hyperlink =
-            self.start_prelude_hyperlink_span(line_number, column)?;
+        let mut prelude = PreludeWriter::new(self);
+        prelude.start(line_number, column)?;
 
         if !self.config().heading {
-            self.write_path_field(sep)?;
+            prelude.write_path()?;
         }
         if let Some(n) = line_number {
-            self.write_line_number(n, sep)?;
+            prelude.write_line_number(n)?;
         }
         if let Some(n) = column {
             if self.config().column {
-                self.write_column_number(n, sep)?;
+                prelude.write_column_number(n)?;
             }
         }
         if self.config().byte_offset {
-            self.write_byte_offset(absolute_byte_offset, sep)?;
+            prelude.write_byte_offset(absolute_byte_offset)?;
         }
-        if hyperlink.is_active() {
-            hyperlink.end(&mut *self.wtr().borrow_mut())?;
-        }
-        Ok(())
-    }
 
-    /// Starts a hyperlink span for a line prelude when applicable.
-    ///
-    /// If a heading was written, and the hyperlink pattern is invariant on the line number,
-    /// then this doesn't hyperlink each line prelude, as it wouldn't point to the line anyway.
-    /// The hyperlink on the heading should be sufficient and less confusing.
-    fn start_prelude_hyperlink_span(
-        &self,
-        line_number: Option<u64>,
-        column: Option<u64>,
-    ) -> io::Result<HyperlinkSpan> {
-        if let Some(path) = self.path() {
-            if self.config().hyperlink_pattern.is_line_dependent()
-                || !self.config().heading
-            {
-                return Ok(self.start_hyperlink_span(
-                    path,
-                    line_number,
-                    column,
-                )?);
-            }
-        }
-        Ok(HyperlinkSpan::default())
+        prelude.end()
     }
 
     #[inline(always)]
@@ -1442,22 +1414,6 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         Ok(())
     }
 
-    /// If this printer has a file path associated with it, then this will
-    /// write that path to the underlying writer followed by the given field
-    /// separator. (If a path terminator is set, then that is used instead of
-    /// the field separator.)
-    fn write_path_field(&self, field_separator: &[u8]) -> io::Result<()> {
-        if let Some(path) = self.path() {
-            self.write_path(path)?;
-            if let Some(term) = self.config().path_terminator {
-                self.write(&[term])?;
-            } else {
-                self.write(field_separator)?;
-            }
-        }
-        Ok(())
-    }
-
     fn write_search_prelude(&self) -> io::Result<()> {
         let this_search_written = self.wtr().borrow().count() > 0;
         if this_search_written {
@@ -1514,39 +1470,6 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
             self.write(sep)?;
             self.write_line_term()?;
         }
-        Ok(())
-    }
-
-    fn write_line_number(
-        &self,
-        line_number: u64,
-        field_separator: &[u8],
-    ) -> io::Result<()> {
-        let n = line_number.to_string();
-        self.write_spec(self.config().colors.line(), n.as_bytes())?;
-        self.write(field_separator)?;
-        Ok(())
-    }
-
-    fn write_column_number(
-        &self,
-        column_number: u64,
-        field_separator: &[u8],
-    ) -> io::Result<()> {
-        let n = column_number.to_string();
-        self.write_spec(self.config().colors.column(), n.as_bytes())?;
-        self.write(field_separator)?;
-        Ok(())
-    }
-
-    fn write_byte_offset(
-        &self,
-        offset: u64,
-        field_separator: &[u8],
-    ) -> io::Result<()> {
-        let n = offset.to_string();
-        self.write_spec(self.config().colors.column(), n.as_bytes())?;
-        self.write(field_separator)?;
         Ok(())
     }
 
@@ -1698,6 +1621,139 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
         }
         let lineterm = self.searcher.line_terminator();
         *range = trim_ascii_prefix(lineterm, slice, *range)
+    }
+}
+
+/// A writer for the prelude (the beginning part of a matching line).
+///
+/// This encapsulates the state needed to print the prelude.
+struct PreludeWriter<'a, M: Matcher, W> {
+    std: &'a StandardImpl<'a, M, W>,
+    next_separator: PreludeSeparator,
+    field_separator: &'a [u8],
+    hyperlink: HyperlinkSpan,
+}
+
+/// A type of separator used in the prelude
+enum PreludeSeparator {
+    /// No separator.
+    None,
+    /// The field separator, either for a matching or contextual line.
+    FieldSeparator,
+    /// The path terminator.
+    PathTerminator,
+}
+
+impl<'a, M: Matcher, W: WriteColor> PreludeWriter<'a, M, W> {
+    /// Creates a new prelude printer.
+    fn new(std: &'a StandardImpl<'a, M, W>) -> PreludeWriter<'a, M, W> {
+        Self {
+            std,
+            next_separator: PreludeSeparator::None,
+            field_separator: std.separator_field(),
+            hyperlink: HyperlinkSpan::default(),
+        }
+    }
+
+    /// Starts the prelude with a hyperlink when applicable.
+    ///
+    /// If a heading was written, and the hyperlink pattern is invariant on the line number,
+    /// then this doesn't hyperlink each line prelude, as it wouldn't point to the line anyway.
+    /// The hyperlink on the heading should be sufficient and less confusing.
+    fn start(
+        &mut self,
+        line_number: Option<u64>,
+        column: Option<u64>,
+    ) -> io::Result<()> {
+        if let Some(path) = self.std.path() {
+            if self.config().hyperlink_pattern.is_line_dependent()
+                || !self.config().heading
+            {
+                self.hyperlink = self.std.start_hyperlink_span(
+                    path,
+                    line_number,
+                    column,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Ends the prelude and writes the remaining output.
+    fn end(&mut self) -> io::Result<()> {
+        if self.hyperlink.is_active() {
+            self.hyperlink.end(&mut *self.std.wtr().borrow_mut())?;
+        }
+        self.write_separator()
+    }
+
+    /// If this printer has a file path associated with it, then this will
+    /// write that path to the underlying writer followed by the given field
+    /// separator. (If a path terminator is set, then that is used instead of
+    /// the field separator.)
+    fn write_path(&mut self) -> io::Result<()> {
+        if let Some(path) = self.std.path() {
+            self.write_separator()?;
+            self.std.write_path(path)?;
+
+            self.next_separator = if self.config().path_terminator.is_some() {
+                PreludeSeparator::PathTerminator
+            } else {
+                PreludeSeparator::FieldSeparator
+            };
+        }
+        Ok(())
+    }
+
+    /// Writes the line number field.
+    fn write_line_number(&mut self, line_number: u64) -> io::Result<()> {
+        self.write_separator()?;
+        let n = line_number.to_string();
+        self.std.write_spec(self.config().colors.line(), n.as_bytes())?;
+        self.next_separator = PreludeSeparator::FieldSeparator;
+        Ok(())
+    }
+
+    /// Writes the column number field.
+    fn write_column_number(&mut self, column_number: u64) -> io::Result<()> {
+        self.write_separator()?;
+        let n = column_number.to_string();
+        self.std.write_spec(self.config().colors.column(), n.as_bytes())?;
+        self.next_separator = PreludeSeparator::FieldSeparator;
+        Ok(())
+    }
+
+    /// Writes the byte offset field.
+    fn write_byte_offset(&mut self, offset: u64) -> io::Result<()> {
+        self.write_separator()?;
+        let n = offset.to_string();
+        self.std.write_spec(self.config().colors.column(), n.as_bytes())?;
+        self.next_separator = PreludeSeparator::FieldSeparator;
+        Ok(())
+    }
+
+    /// Writes the separator defined by the preceding field.
+    ///
+    /// This is called before writing the contents of a field, and at
+    /// the end of the prelude.
+    fn write_separator(&mut self) -> io::Result<()> {
+        match self.next_separator {
+            PreludeSeparator::None => {}
+            PreludeSeparator::FieldSeparator => {
+                self.std.write(self.field_separator)?;
+            }
+            PreludeSeparator::PathTerminator => {
+                if let Some(term) = self.config().path_terminator {
+                    self.std.write(&[term])?;
+                }
+            }
+        }
+        self.next_separator = PreludeSeparator::None;
+        Ok(())
+    }
+
+    fn config(&self) -> &Config {
+        self.std.config()
     }
 }
 
