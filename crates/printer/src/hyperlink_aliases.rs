@@ -6,6 +6,7 @@ pub const HYPERLINK_PATTERN_ALIASES: &[(&str, &str)] = &[
     ("file", "file://{host}/{file}"),
     #[cfg(windows)]
     ("file", "file:///{file}"),
+    ("grep+", "grep+:///{file}:{line}"),
     ("kitty", "file://{host}/{file}#{line}"),
     ("none", ""),
     // https://code.visualstudio.com/docs/editor/command-line#_opening-vs-code-with-urls
