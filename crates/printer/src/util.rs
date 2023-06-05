@@ -1,5 +1,5 @@
-use once_cell::unsync::OnceCell;
 use std::borrow::Cow;
+use std::cell::OnceCell;
 use std::path::Path;
 use std::time;
 use std::{fmt, io};

@@ -219,7 +219,6 @@ dependencies = [
  "grep-regex",
  "grep-searcher",
  "lazy_static",
- "once_cell",
  "serde",
  "serde_json",
  "termcolor",

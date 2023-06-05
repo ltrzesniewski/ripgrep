@@ -343,7 +343,7 @@ $ pkgman install ripgrep_x86
 
 If you're a **Rust programmer**, ripgrep can be installed with `cargo`.
 
-* Note that the minimum supported version of Rust for ripgrep is **1.65.0**,
+* Note that the minimum supported version of Rust for ripgrep is **1.70.0**,
   although ripgrep may work with older versions.
 * Note that the binary may be bigger than expected because it contains debug
   symbols. This is intentional. To remove debug symbols and therefore reduce
@@ -358,7 +358,7 @@ $ cargo install ripgrep
 
 ripgrep is written in Rust, so you'll need to grab a
 [Rust installation](https://www.rust-lang.org/) in order to compile it.
-ripgrep compiles with Rust 1.65.0 (stable) or newer. In general, ripgrep tracks
+ripgrep compiles with Rust 1.70.0 (stable) or newer. In general, ripgrep tracks
 the latest stable release of the Rust compiler.
 
 To build ripgrep:
