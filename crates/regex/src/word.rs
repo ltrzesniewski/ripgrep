@@ -1,39 +1,59 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    panic::{RefUnwindSafe, UnwindSafe},
+    sync::Arc,
+};
 
-use grep_matcher::{Match, Matcher, NoError};
-use regex::bytes::{CaptureLocations, Regex};
-use thread_local::ThreadLocal;
+use {
+    grep_matcher::{Match, Matcher, NoError},
+    regex_automata::{
+        meta::Regex, util::captures::Captures, util::pool::Pool, Input,
+        PatternID,
+    },
+};
 
-use crate::config::ConfiguredHIR;
-use crate::error::Error;
-use crate::matcher::RegexCaptures;
+use crate::{config::ConfiguredHIR, error::Error, matcher::RegexCaptures};
+
+type PoolFn =
+    Box<dyn Fn() -> Captures + Send + Sync + UnwindSafe + RefUnwindSafe>;
 
 /// A matcher for implementing "word match" semantics.
 #[derive(Debug)]
-pub struct WordMatcher {
+pub(crate) struct WordMatcher {
     /// The regex which is roughly `(?:^|\W)(<original pattern>)(?:$|\W)`.
     regex: Regex,
+    /// The HIR that produced the regex above. We don't keep the HIR for the
+    /// `original` regex.
+    ///
+    /// We put this in an `Arc` because by the time it gets here, it won't
+    /// change. And because cloning and dropping an `Hir` is somewhat expensive
+    /// due to its deep recursive representation.
+    chir: Arc<ConfiguredHIR>,
     /// The original regex supplied by the user, which we use in a fast path
     /// to try and detect matches before deferring to slower engines.
     original: Regex,
     /// A map from capture group name to capture group index.
     names: HashMap<String, usize>,
-    /// A reusable buffer for finding the match location of the inner group.
-    locs: Arc<ThreadLocal<RefCell<CaptureLocations>>>,
+    /// A thread-safe pool of reusable buffers for finding the match offset of
+    /// the inner group.
+    caps: Arc<Pool<Captures, PoolFn>>,
 }
 
 impl Clone for WordMatcher {
     fn clone(&self) -> WordMatcher {
-        // We implement Clone manually so that we get a fresh ThreadLocal such
-        // that it can set its own thread owner. This permits each thread
-        // usings `locs` to hit the fast path.
+        // We implement Clone manually so that we get a fresh Pool such that it
+        // can set its own thread owner. This permits each thread usings `caps`
+        // to hit the fast path.
+        //
+        // Note that cloning a regex is "cheap" since it uses reference
+        // counting internally.
+        let re = self.regex.clone();
         WordMatcher {
             regex: self.regex.clone(),
+            chir: Arc::clone(&self.chir),
             original: self.original.clone(),
             names: self.names.clone(),
-            locs: Arc::new(ThreadLocal::new()),
+            caps: Arc::new(Pool::new(Box::new(move || re.create_captures()))),
         }
     }
 }
@@ -44,29 +64,36 @@ impl WordMatcher {
     ///
     /// The given options are used to construct the regular expression
     /// internally.
-    pub fn new(expr: &ConfiguredHIR) -> Result<WordMatcher, Error> {
-        let original =
-            expr.with_pattern(|pat| format!("^(?:{})$", pat))?.regex()?;
-        let word_expr = expr.with_pattern(|pat| {
-            let pat = format!(r"(?:(?m:^)|\W)({})(?:\W|(?m:$))", pat);
-            log::debug!("word regex: {:?}", pat);
-            pat
-        })?;
-        let regex = word_expr.regex()?;
-        let locs = Arc::new(ThreadLocal::new());
+    pub(crate) fn new(chir: ConfiguredHIR) -> Result<WordMatcher, Error> {
+        let original = chir.clone().into_anchored().to_regex()?;
+        let chir = Arc::new(chir.into_word()?);
+        let regex = chir.to_regex()?;
+        let caps = Arc::new(Pool::new({
+            let regex = regex.clone();
+            Box::new(move || regex.create_captures()) as PoolFn
+        }));
 
         let mut names = HashMap::new();
-        for (i, optional_name) in regex.capture_names().enumerate() {
+        let it = regex.group_info().pattern_names(PatternID::ZERO);
+        for (i, optional_name) in it.enumerate() {
             if let Some(name) = optional_name {
                 names.insert(name.to_string(), i.checked_sub(1).unwrap());
             }
         }
-        Ok(WordMatcher { regex, original, names, locs })
+        Ok(WordMatcher { regex, chir, original, names, caps })
     }
 
-    /// Return the underlying regex used by this matcher.
-    pub fn regex(&self) -> &Regex {
+    /// Return the underlying regex used to match at word boundaries.
+    ///
+    /// The original regex is in the capture group at index 1.
+    pub(crate) fn regex(&self) -> &Regex {
         &self.regex
+    }
+
+    /// Return the underlying HIR for the regex used to match at word
+    /// boundaries.
+    pub(crate) fn chir(&self) -> &ConfiguredHIR {
+        &self.chir
     }
 
     /// Attempt to do a fast confirmation of a word match that covers a subset
@@ -79,12 +106,11 @@ impl WordMatcher {
         haystack: &[u8],
         at: usize,
     ) -> Result<Option<Match>, ()> {
-        // This is a bit hairy. The whole point here is to avoid running an
-        // NFA simulation in the regex engine. Remember, our word regex looks
-        // like this:
+        // This is a bit hairy. The whole point here is to avoid running a
+        // slower regex engine to extract capture groups. Remember, our word
+        // regex looks like this:
         //
-        //     (^|\W)(<original regex>)($|\W)
-        //     where ^ and $ have multiline mode DISABLED
+        //     (^|\W)(<original regex>)(\W|$)
         //
         // What we want are the match offsets of <original regex>. So in the
         // easy/common case, the original regex will be sandwiched between
@@ -102,7 +128,8 @@ impl WordMatcher {
         // The reason why we cannot handle the ^/$ cases here is because we
         // can't assume anything about the original pattern. (Try commenting
         // out the checks for ^/$ below and run the tests to see examples.)
-        let mut cand = match self.regex.find_at(haystack, at) {
+        let input = Input::new(haystack).span(at..haystack.len());
+        let mut cand = match self.regex.find(input) {
             None => return Ok(None),
             Some(m) => Match::new(m.start(), m.end()),
         };
@@ -145,23 +172,23 @@ impl Matcher for WordMatcher {
         //
         // OK, well, it turns out that it is worth it! But it is quite tricky.
         // See `fast_find` for details. Effectively, this lets us skip running
-        // the NFA simulation in the regex engine in the vast majority of
-        // cases. However, the NFA simulation is required for full correctness.
+        // a slower regex engine to extract capture groups in the vast majority
+        // of cases. However, the slower engine is I believe required for full
+        // correctness.
         match self.fast_find(haystack, at) {
             Ok(Some(m)) => return Ok(Some(m)),
             Ok(None) => return Ok(None),
             Err(()) => {}
         }
 
-        let cell =
-            self.locs.get_or(|| RefCell::new(self.regex.capture_locations()));
-        let mut caps = cell.borrow_mut();
-        self.regex.captures_read_at(&mut caps, haystack, at);
-        Ok(caps.get(1).map(|m| Match::new(m.0, m.1)))
+        let input = Input::new(haystack).span(at..haystack.len());
+        let mut caps = self.caps.get();
+        self.regex.search_captures(&input, &mut caps);
+        Ok(caps.get_group(1).map(|sp| Match::new(sp.start, sp.end)))
     }
 
     fn new_captures(&self) -> Result<RegexCaptures, NoError> {
-        Ok(RegexCaptures::with_offset(self.regex.capture_locations(), 1))
+        Ok(RegexCaptures::with_offset(self.regex.create_captures(), 1))
     }
 
     fn capture_count(&self) -> usize {
@@ -178,9 +205,10 @@ impl Matcher for WordMatcher {
         at: usize,
         caps: &mut RegexCaptures,
     ) -> Result<bool, NoError> {
-        let r =
-            self.regex.captures_read_at(caps.locations_mut(), haystack, at);
-        Ok(r.is_some())
+        let input = Input::new(haystack).span(at..haystack.len());
+        let caps = caps.captures_mut();
+        self.regex.search_captures(&input, caps);
+        Ok(caps.is_match())
     }
 
     // We specifically do not implement other methods like find_iter or
@@ -195,8 +223,8 @@ mod tests {
     use grep_matcher::{Captures, Match, Matcher};
 
     fn matcher(pattern: &str) -> WordMatcher {
-        let chir = Config::default().hir(pattern).unwrap();
-        WordMatcher::new(&chir).unwrap()
+        let chir = Config::default().build_many(&[pattern]).unwrap();
+        WordMatcher::new(chir).unwrap()
     }
 
     fn find(pattern: &str, haystack: &str) -> Option<(usize, usize)> {

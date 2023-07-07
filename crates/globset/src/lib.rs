@@ -498,11 +498,21 @@ impl GlobSetBuilder {
 /// Constructing candidates has a very small cost associated with it, so
 /// callers may find it beneficial to amortize that cost when matching a single
 /// path against multiple globs or sets of globs.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Candidate<'a> {
     path: Cow<'a, [u8]>,
     basename: Cow<'a, [u8]>,
     ext: Cow<'a, [u8]>,
+}
+
+impl<'a> std::fmt::Debug for Candidate<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("Candidate")
+            .field("path", &self.path.as_bstr())
+            .field("basename", &self.basename.as_bstr())
+            .field("ext", &self.ext.as_bstr())
+            .finish()
+    }
 }
 
 impl<'a> Candidate<'a> {
@@ -818,7 +828,7 @@ impl MultiStrategyBuilder {
 
     fn prefix(self) -> PrefixStrategy {
         PrefixStrategy {
-            matcher: AhoCorasick::new_auto_configured(&self.literals),
+            matcher: AhoCorasick::new(&self.literals).unwrap(),
             map: self.map,
             longest: self.longest,
         }
@@ -826,7 +836,7 @@ impl MultiStrategyBuilder {
 
     fn suffix(self) -> SuffixStrategy {
         SuffixStrategy {
-            matcher: AhoCorasick::new_auto_configured(&self.literals),
+            matcher: AhoCorasick::new(&self.literals).unwrap(),
             map: self.map,
             longest: self.longest,
         }
