@@ -387,6 +387,7 @@ fn special(mode: crate::flags::SpecialMode) -> anyhow::Result<ExitCode> {
     let output = match mode {
         SpecialMode::HelpShort => flags::generate_help_short(),
         SpecialMode::HelpLong => flags::generate_help_long(),
+        SpecialMode::HelpFlag(name) => flags::generate_help_flag(name),
         SpecialMode::VersionShort => flags::generate_version_short(),
         SpecialMode::VersionLong => flags::generate_version_long(),
         // --pcre2-version is a little special because it emits an error

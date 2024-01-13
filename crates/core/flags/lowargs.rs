@@ -127,6 +127,10 @@ pub(crate) enum SpecialMode {
     /// Shows a very verbose version of the "help" output. The docs for some
     /// flags will be paragraphs long. This corresponds to the `--help` flag.
     HelpLong,
+    /// Shows a very verbose version of the "help" output for a single flag.
+    /// This corresponds to the `-h` or `--help` flag with a single other
+    /// argument. The value is the long name of the flag.
+    HelpFlag(&'static str),
     /// Show condensed version information. e.g., `ripgrep x.y.z`.
     VersionShort,
     /// Show verbose version information. Includes "short" information as well

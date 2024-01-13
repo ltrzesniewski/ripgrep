@@ -2687,6 +2687,9 @@ long flag, \fB\-\-help\fP, is different. The short flag will show a condensed
 help output while the long flag will show a verbose help output. The verbose
 help output has complete documentation, where as the condensed help output will
 show only a single line for every flag.
+.sp
+This flag may also be used with a single other flag or flag name, and when
+found it will show the verbose help output for that flag only.
 "
     }
 
@@ -2711,11 +2714,23 @@ fn test_help() {
     let args = parse_low_raw(["--help"]).unwrap();
     assert_eq!(Some(SpecialMode::HelpLong), args.special);
 
-    let args = parse_low_raw(["-h", "--help"]).unwrap();
+    let args = parse_low_raw(["-h", "--help", "anything"]).unwrap();
     assert_eq!(Some(SpecialMode::HelpLong), args.special);
 
-    let args = parse_low_raw(["--help", "-h"]).unwrap();
+    let args = parse_low_raw(["--help", "-h", "anything"]).unwrap();
     assert_eq!(Some(SpecialMode::HelpShort), args.special);
+
+    let args = parse_low_raw(["-h", "--help"]).unwrap();
+    assert_eq!(Some(SpecialMode::HelpFlag("help")), args.special);
+
+    let args = parse_low_raw(["--help", "-h"]).unwrap();
+    assert_eq!(Some(SpecialMode::HelpFlag("help")), args.special);
+
+    let args = parse_low_raw(["-h", "--encoding"]).unwrap();
+    assert_eq!(Some(SpecialMode::HelpFlag("encoding")), args.special);
+
+    let args = parse_low_raw(["--no-encoding", "--help"]).unwrap();
+    assert_eq!(Some(SpecialMode::HelpFlag("encoding")), args.special);
 }
 
 /// -./--hidden

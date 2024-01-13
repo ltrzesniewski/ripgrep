@@ -2,7 +2,11 @@
 Parses command line arguments into a structured and typed representation.
 */
 
-use std::{borrow::Cow, collections::BTreeSet, ffi::OsString};
+use std::{
+    borrow::Cow,
+    collections::BTreeSet,
+    ffi::{OsStr, OsString},
+};
 
 use anyhow::Context;
 
@@ -223,7 +227,42 @@ impl Parser {
         I: IntoIterator<Item = O>,
         O: Into<OsString>,
     {
-        let mut p = lexopt::Parser::from_args(rawargs);
+        let arg_list = rawargs.into_iter().map(Into::into).collect::<Vec<_>>();
+
+        // Special case for -h/--help used with a second argument.
+        // The argument value (if expected) needs to be skipped in that case.
+        if arg_list.len() == 2 {
+            let h = OsStr::new("-h");
+            let help = OsStr::new("--help");
+
+            let other_arg = if arg_list[0].eq(h) || arg_list[0].eq(help) {
+                arg_list[1].to_str()
+            } else if arg_list[1].eq(h) || arg_list[1].eq(help) {
+                arg_list[0].to_str()
+            } else {
+                None
+            };
+
+            if let Some(other_arg) = other_arg {
+                let mat = if other_arg.len() == 1 {
+                    self.find_short(other_arg.chars().nth(0).unwrap())
+                } else if other_arg.len() == 2 && other_arg.starts_with("-") {
+                    self.find_short(other_arg.chars().nth(1).unwrap())
+                } else if other_arg.starts_with("--") {
+                    self.find_long(&other_arg[2..])
+                } else {
+                    self.find_long(other_arg)
+                };
+
+                if let FlagLookup::Match(mat) = mat {
+                    args.special =
+                        Some(SpecialMode::HelpFlag(mat.flag.name_long()));
+                    return Ok(());
+                }
+            }
+        }
+
+        let mut p = lexopt::Parser::from_args(arg_list);
         while let Some(arg) = p.next().context("invalid CLI arguments")? {
             let lookup = match arg {
                 lexopt::Arg::Value(value) => {
