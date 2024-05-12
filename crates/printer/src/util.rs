@@ -539,6 +539,16 @@ pub(crate) fn trim_line_terminator(
     }
 }
 
+/// Returns the line terminator used by the current system.
+#[inline]
+pub(crate) fn system_line_terminator() -> LineTerminator {
+    if cfg!(windows) {
+        LineTerminator::crlf()
+    } else {
+        LineTerminator::byte(b'\n')
+    }
+}
+
 /// Like `Matcher::replace_with_captures_at`, but accepts an end bound.
 ///
 /// See also: `find_iter_at_in_context` for why we need this.

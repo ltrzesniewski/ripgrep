@@ -17,7 +17,7 @@ use crate::{
     counter::CounterWriter,
     hyperlink::{self, HyperlinkConfig},
     stats::Stats,
-    util::{find_iter_at_in_context, PrinterPath},
+    util::{find_iter_at_in_context, system_line_terminator, PrinterPath},
 };
 
 /// The configuration for the summary printer.
@@ -561,13 +561,13 @@ impl<'p, 's, M: Matcher, W: WriteColor> SummarySink<'p, 's, M, W> {
     /// write that path to the underlying writer followed by a line terminator.
     /// (If a path terminator is set, then that is used instead of the line
     /// terminator.)
-    fn write_path_line(&mut self, searcher: &Searcher) -> io::Result<()> {
+    fn write_path_line(&mut self) -> io::Result<()> {
         if self.path.is_some() {
             self.write_path()?;
             if let Some(term) = self.summary.config.path_terminator {
                 self.write(&[term])?;
             } else {
-                self.write_line_term(searcher)?;
+                self.write_line_term()?;
             }
         }
         Ok(())
@@ -624,9 +624,9 @@ impl<'p, 's, M: Matcher, W: WriteColor> SummarySink<'p, 's, M, W> {
         self.interpolator.finish(status, &mut *self.summary.wtr.borrow_mut())
     }
 
-    /// Write the line terminator configured on the given searcher.
-    fn write_line_term(&self, searcher: &Searcher) -> io::Result<()> {
-        self.write(searcher.line_terminator().as_bytes())
+    /// Write the system line terminator.
+    fn write_line_term(&self) -> io::Result<()> {
+        self.write(system_line_terminator().as_bytes())
     }
 
     /// Write the given bytes using the give style.
@@ -774,7 +774,7 @@ impl<'p, 's, M: Matcher, W: WriteColor> Sink for SummarySink<'p, 's, M, W> {
                 if show_count {
                     self.write_path_field()?;
                     self.write(self.match_count.to_string().as_bytes())?;
-                    self.write_line_term(searcher)?;
+                    self.write_line_term()?;
                 }
             }
             SummaryKind::CountMatches => {
@@ -785,17 +785,17 @@ impl<'p, 's, M: Matcher, W: WriteColor> Sink for SummarySink<'p, 's, M, W> {
                         .as_ref()
                         .expect("CountMatches should enable stats tracking");
                     self.write(stats.matches().to_string().as_bytes())?;
-                    self.write_line_term(searcher)?;
+                    self.write_line_term()?;
                 }
             }
             SummaryKind::PathWithMatch => {
                 if self.match_count > 0 {
-                    self.write_path_line(searcher)?;
+                    self.write_path_line()?;
                 }
             }
             SummaryKind::PathWithoutMatch => {
                 if self.match_count == 0 {
-                    self.write_path_line(searcher)?;
+                    self.write_path_line()?;
                 }
             }
             SummaryKind::Quiet => {}
@@ -820,6 +820,14 @@ can extract a clew from a wisp of straw or a flake of cigar ash;
 but Doctor Watson has to have it taken out for him and dusted,
 and exhibited clearly, with a label attached.
 ";
+
+    fn expected_contents(expected: &str) -> String {
+        let mut expected = expected.to_string();
+        if cfg!(windows) {
+            expected = expected.replace('\n', "\r\n");
+        }
+        expected
+    }
 
     fn printer_contents(printer: &mut Summary<NoColor<Vec<u8>>>) -> String {
         String::from_utf8(printer.get_mut().get_ref().to_owned()).unwrap()
@@ -865,7 +873,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("2\n", got);
+        let expected = expected_contents("2\n");
+        assert_eq_printed!(expected, got);
     }
 
     #[test]
@@ -885,7 +894,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("2\n", got);
+        let expected = expected_contents("2\n");
+        assert_eq_printed!(expected, got);
     }
 
     #[test]
@@ -904,7 +914,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("sherlock:2\n", got);
+        let expected = expected_contents("sherlock:2\n");
+        assert_eq_printed!(expected, got);
     }
 
     #[test]
@@ -924,7 +935,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("sherlock:0\n", got);
+        let expected = expected_contents("sherlock:0\n");
+        assert_eq_printed!(expected, got);
     }
 
     #[test]
@@ -944,7 +956,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("", got);
+        let expected = expected_contents("");
+        assert_eq_printed!(expected, got);
     }
 
     #[test]
@@ -964,7 +977,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("sherlockZZ2\n", got);
+        let expected = expected_contents("sherlockZZ2\n");
+        assert_eq_printed!(expected, got);
     }
 
     #[test]
@@ -984,7 +998,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("sherlock\x002\n", got);
+        let expected = expected_contents("sherlock\x002\n");
+        assert_eq_printed!(expected, got);
     }
 
     #[test]
@@ -1004,7 +1019,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("\\home\\andrew\\sherlock:2\n", got);
+        let expected = expected_contents("\\home\\andrew\\sherlock:2\n");
+        assert_eq_printed!(expected, got);
     }
 
     #[test]
@@ -1020,7 +1036,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("1\n", got);
+        let expected = expected_contents("1\n");
+        assert_eq_printed!(expected, got);
     }
 
     #[test]
@@ -1039,7 +1056,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("sherlock:4\n", got);
+        let expected = expected_contents("sherlock:4\n");
+        assert_eq_printed!(expected, got);
     }
 
     #[test]
@@ -1058,7 +1076,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("sherlock\n", got);
+        let expected = expected_contents("sherlock\n");
+        assert_eq_printed!(expected, got);
     }
 
     #[test]
@@ -1077,7 +1096,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("", got);
+        let expected = expected_contents("");
+        assert_eq_printed!(expected, got);
     }
 
     #[test]
@@ -1096,7 +1116,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("sherlock\n", got);
+        let expected = expected_contents("sherlock\n");
+        assert_eq_printed!(expected, got);
     }
 
     #[test]
@@ -1115,7 +1136,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("", got);
+        let expected = expected_contents("");
+        assert_eq_printed!(expected, got);
     }
 
     #[test]
@@ -1134,7 +1156,8 @@ and exhibited clearly, with a label attached.
         };
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("", got);
+        let expected = expected_contents("");
+        assert_eq_printed!(expected, got);
         // There is actually more than one match, but Quiet should quit after
         // finding the first one.
         assert_eq!(1, match_count);
@@ -1157,7 +1180,8 @@ and exhibited clearly, with a label attached.
         };
 
         let got = printer_contents(&mut printer);
-        assert_eq_printed!("", got);
+        let expected = expected_contents("");
+        assert_eq_printed!(expected, got);
         // There is actually more than one match, and Quiet will usually quit
         // after finding the first one, but since we request stats, it will
         // mush on to find all matches.

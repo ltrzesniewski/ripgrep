@@ -23,8 +23,8 @@ use crate::{
     hyperlink::{self, HyperlinkConfig},
     stats::Stats,
     util::{
-        find_iter_at_in_context, trim_ascii_prefix, trim_line_terminator,
-        DecimalFormatter, PrinterPath, Replacer, Sunk,
+        find_iter_at_in_context, system_line_terminator, trim_ascii_prefix,
+        trim_line_terminator, DecimalFormatter, PrinterPath, Replacer, Sunk,
     },
 };
 
@@ -1274,9 +1274,22 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
             )?;
         } else {
             // self.write_trim(line)?;
-            self.write(line)?;
-            if !self.has_line_terminator(line) {
-                self.write_line_term()?;
+
+            if cfg!(windows) {
+                if line.ends_with(b"\r\n") {
+                    self.write(line)?;
+                } else if line.ends_with(b"\n") {
+                    self.write(&line[..line.len() - 1])?;
+                    self.write_line_term()?;
+                } else {
+                    self.write(line)?;
+                    self.write_line_term()?;
+                }
+            } else {
+                self.write(line)?;
+                if !line.ends_with(b"\n") {
+                    self.write_line_term()?;
+                }
             }
         }
         Ok(())
@@ -1491,7 +1504,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     }
 
     fn write_line_term(&self) -> io::Result<()> {
-        self.write(self.searcher.line_terminator().as_bytes())
+        self.write(system_line_terminator().as_bytes())
     }
 
     fn write_spec(&self, spec: &ColorSpec, buf: &[u8]) -> io::Result<()> {
@@ -1560,10 +1573,6 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
 
     fn trim_line_terminator(&self, buf: &[u8], line: &mut Match) {
         trim_line_terminator(&self.searcher, buf, line);
-    }
-
-    fn has_line_terminator(&self, buf: &[u8]) -> bool {
-        self.searcher.line_terminator().is_suffix(buf)
     }
 
     fn is_context(&self) -> bool {
@@ -1807,6 +1816,14 @@ but Doctor Watson has to have it taken out for him and dusted,\r
 and exhibited clearly, with a label attached.\
 ";
 
+    fn expected_contents(expected: &str) -> String {
+        let mut expected = expected.to_string();
+        if cfg!(windows) {
+            expected = expected.replace('\n', "\r\n");
+        }
+        expected
+    }
+
     fn printer_contents(printer: &mut Standard<NoColor<Vec<u8>>>) -> String {
         String::from_utf8(printer.get_mut().get_ref().to_owned()).unwrap()
     }
@@ -1947,14 +1964,16 @@ and exhibited clearly, with a label attached.\
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
 --abc--
 can extract a clew from a wisp of straw or a flake of cigar ash;
 but Doctor Watson has to have it taken out for him and dusted,
 and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -1990,7 +2009,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
 --abc--
@@ -2004,7 +2024,8 @@ Holmeses, success in the province of detective work must always
 can extract a clew from a wisp of straw or a flake of cigar ash;
 but Doctor Watson has to have it taken out for him and dusted,
 and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2041,7 +2062,8 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
 --abc--
@@ -2055,7 +2077,8 @@ Holmeses, success in the province of detective work must always
 can extract a clew from a wisp of straw or a flake of cigar ash;
 but Doctor Watson has to have it taken out for him and dusted,
 and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2075,10 +2098,12 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:For the Doctor Watsons of this world, as opposed to the Sherlock
 5:but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2102,14 +2127,16 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 sherlock!!For the Doctor Watsons of this world, as opposed to the Sherlock
 sherlock^^Holmeses, success in the province of detective work must always
 --
 sherlock^^can extract a clew from a wisp of straw or a flake of cigar ash;
 sherlock!!but Doctor Watson has to have it taken out for him and dusted,
 sherlock^^and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2130,10 +2157,12 @@ sherlock^^and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 booksZsherlock:For the Doctor Watsons of this world, as opposed to the Sherlock
 booksZsherlock:but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2154,10 +2183,12 @@ booksZsherlock:but Doctor Watson has to have it taken out for him and dusted,
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 books/sherlockZFor the Doctor Watsons of this world, as opposed to the Sherlock
 books/sherlockZbut Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2177,11 +2208,13 @@ books/sherlockZbut Doctor Watson has to have it taken out for him and dusted,
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 sherlock
 For the Doctor Watsons of this world, as opposed to the Sherlock
 but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2201,10 +2234,12 @@ but Doctor Watson has to have it taken out for him and dusted,
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 sherlock:For the Doctor Watsons of this world, as opposed to the Sherlock
 sherlock:but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2235,12 +2270,14 @@ sherlock:but Doctor Watson has to have it taken out for him and dusted,
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 sherlock:For the Doctor Watsons of this world, as opposed to the Sherlock
 sherlock:but Doctor Watson has to have it taken out for him and dusted,
 sherlock:For the Doctor Watsons of this world, as opposed to the Sherlock
 sherlock:be, to a very large extent, the result of luck. Sherlock Holmes
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2271,14 +2308,16 @@ sherlock:be, to a very large extent, the result of luck. Sherlock Holmes
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 sherlock
 For the Doctor Watsons of this world, as opposed to the Sherlock
 but Doctor Watson has to have it taken out for him and dusted,
 sherlock
 For the Doctor Watsons of this world, as opposed to the Sherlock
 be, to a very large extent, the result of luck. Sherlock Holmes
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2299,9 +2338,11 @@ be, to a very large extent, the result of luck. Sherlock Holmes
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 Watson
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2324,9 +2365,11 @@ Watson
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 Watson
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2348,10 +2391,12 @@ Watson
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1-
 2:Watson
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2370,10 +2415,12 @@ Watson
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:For the Doctor Watsons of this world, as opposed to the Sherlock
 5:but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2393,13 +2440,15 @@ Watson
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:For the Doctor Watsons of this world, as opposed to the Sherlock
 2:Holmeses, success in the province of detective work must always
 3:be, to a very large extent, the result of luck. Sherlock Holmes
 4:can extract a clew from a wisp of straw or a flake of cigar ash;
 5:but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2419,10 +2468,12 @@ Watson
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 16:For the Doctor Watsons of this world, as opposed to the Sherlock
 12:but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2443,13 +2494,15 @@ Watson
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 16:For the Doctor Watsons of this world, as opposed to the Sherlock
 16:Holmeses, success in the province of detective work must always
 16:be, to a very large extent, the result of luck. Sherlock Holmes
 16:can extract a clew from a wisp of straw or a flake of cigar ash;
 16:but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2470,10 +2523,12 @@ Watson
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 0:For the Doctor Watsons of this world, as opposed to the Sherlock
 258:but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2495,13 +2550,15 @@ Watson
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 0:For the Doctor Watsons of this world, as opposed to the Sherlock
 65:Holmeses, success in the province of detective work must always
 129:be, to a very large extent, the result of luck. Sherlock Holmes
 193:can extract a clew from a wisp of straw or a flake of cigar ash;
 258:but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2522,10 +2579,12 @@ Watson
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 [Omitted long matching line]
 but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2547,10 +2606,12 @@ but Doctor Watson has to have it taken out for him and dusted,
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 but Doctor Watson has to have it taken out for [... omitted end of long line]
 and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2572,10 +2633,12 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 [Omitted long line with 2 matches]
 but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2598,10 +2661,12 @@ but Doctor Watson has to have it taken out for him and dusted,
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 but Doctor Watson has to have it taken out for [... 0 more matches]
 and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2624,10 +2689,12 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 but Doctor Watson has to have it taken out for [... 1 more match]
 and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2651,10 +2718,12 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 but Doctor Watson has to have it taken out for [... 1 more match]
 and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2676,10 +2745,12 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 [Omitted long matching line]
 but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2705,11 +2776,13 @@ but Doctor Watson has to have it taken out for him and dusted,
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 can extract a clew from a wisp of straw or a f [... 1 more match]
 but Doctor Watson has to have it taken out for [... 0 more matches]
 and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2730,9 +2803,11 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 For the Doctor Watsons of this world, as opposed to the Sherlock
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2755,10 +2830,12 @@ For the Doctor Watsons of this world, as opposed to the Sherlock
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
-";
+",
+        );
         assert_eq_printed!(expected, got);
 
         // after context: 4
@@ -2777,13 +2854,15 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
 be, to a very large extent, the result of luck. Sherlock Holmes
 can extract a clew from a wisp of straw or a flake of cigar ash;
 but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
 
         // after context: 1, max matches: 2
@@ -2803,13 +2882,15 @@ but Doctor Watson has to have it taken out for him and dusted,
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
 --
 but Doctor Watson has to have it taken out for him and dusted,
 and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
 
         // after context: 4, max matches: 2
@@ -2828,14 +2909,16 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
 be, to a very large extent, the result of luck. Sherlock Holmes
 can extract a clew from a wisp of straw or a flake of cigar ash;
 but Doctor Watson has to have it taken out for him and dusted,
 and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2857,9 +2940,11 @@ and exhibited clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 For the Doctor Watsons of this world, as opposed to the Sherlock
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2882,10 +2967,12 @@ For the Doctor Watsons of this world, as opposed to the Sherlock
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2907,11 +2994,13 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:9:Doctor Watsons
 1:57:Sherlock
 3:49:Sherlock
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2935,11 +3024,13 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:9:Doctor Watsons
 1:57:Sherlock
 3:49:Sherlock
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2963,12 +3054,14 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:16:Watsons of this world, as opposed to the Sherlock
 2:16:Holmeses
 5:12:Watson has to have it taken out for him and dusted,
 6:12:and exhibited clearly
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -2991,11 +3084,13 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:9:[Omitted long matching line]
 1:57:Sherlock
 3:49:Sherlock
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3019,11 +3114,13 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:9:Doctor Wat [... 0 more matches]
 1:57:Sherlock
 3:49:Sherlock
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3052,11 +3149,13 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:9:[Omitted long matching line]
 1:57:Sherlock
 3:49:Sherlock
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3086,11 +3185,13 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:9:Doctor Wat [... 0 more matches]
 1:57:Sherlock
 3:49:Sherlock
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3115,12 +3216,14 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:16:Watsons of this world, as opposed to the Sherlock
 2:16:Holmeses
 5:12:[Omitted long matching line]
 6:12:and exhibited clearly
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3146,12 +3249,14 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:16:Watsons of this world, as opposed to the Sherlock
 2:16:Holmeses
 5:12:Watson has to have it taken out for him and dusted [... 0 more matches]
 6:12:and exhibited clearly
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3173,11 +3278,13 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:9:For the Doctor Watsons of this world, as opposed to the Sherlock
 1:57:For the Doctor Watsons of this world, as opposed to the Sherlock
 3:49:be, to a very large extent, the result of luck. Sherlock Holmes
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3201,11 +3308,13 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:9:For the Doctor Watsons of this world, as opposed to the Sherlock
 1:57:For the Doctor Watsons of this world, as opposed to the Sherlock
 3:49:be, to a very large extent, the result of luck. Sherlock Holmes
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3229,12 +3338,14 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:16:For the Doctor Watsons of this world, as opposed to the Sherlock
 2:1:Holmeses, success in the province of detective work must always
 5:12:but Doctor Watson has to have it taken out for him and dusted,
 6:1:and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3258,12 +3369,14 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:16:For the Doctor Watsons of this world, as opposed to the Sherlock
 2:1:Holmeses, success in the province of detective work must always
 2:58:Holmeses, success in the province of detective work must always
 3:1:be, to a very large extent, the result of luck. Sherlock Holmes
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3288,11 +3401,13 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:9:For the Doctor Watsons of this world, as opposed to the Sherlock
 1:57:For the Doctor Watsons of this world, as opposed to the Sherlock
 3:49:be, to a very large extent, the result of luck. Sherlock Holmes
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3317,10 +3432,12 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:16:For the Doctor Watsons of this world, as opposed to the Sherlock
 5:12:but Doctor Watson has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3345,10 +3462,12 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:16:For the Doctor Watsons of this world, as opposed to the Sherlock
 2:58:Holmeses, success in the province of detective work must always
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3370,14 +3489,16 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:For the doctah Watsons MD of this world, as opposed to the doctah  MD
 2-Holmeses, success in the province of detective work must always
 3:be, to a very large extent, the result of luck. doctah  MD Holmes
 4-can extract a clew from a wisp of straw or a flake of cigar ash;
 5:but doctah Watson MD has to have it taken out for him and dusted,
 6-and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3398,11 +3519,13 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:For the doctah Watsons MD of this world, as opposed to the doctah  MD
 3:be, to a very large extent, the result of luck. doctah  MD Holmes
 5:but doctah Watson MD has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3428,7 +3551,7 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "1:hello?world?\n";
+        let expected = expected_contents("1:hello?world?\n");
         assert_eq_printed!(expected, got);
     }
 
@@ -3454,7 +3577,7 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "1:hello?world?\x00";
+        let expected = expected_contents("1:hello?world?\x00");
         assert_eq_printed!(expected, got);
     }
 
@@ -3476,7 +3599,7 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "1:hello?world?\n";
+        let expected = expected_contents("1:hello?world?\n");
         assert_eq_printed!(expected, got);
     }
 
@@ -3498,11 +3621,13 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:[Omitted long line with 2 matches]
 3:be, to a very large extent, the result of luck. doctah  MD Holmes
 5:but doctah Watson MD has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3525,11 +3650,11 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents("\
 1:For the doctah Watsons MD of this world, as opposed to the doctah   [... 0 more matches]
 3:be, to a very large extent, the result of luck. doctah  MD Holmes
 5:but doctah Watson MD has to have it taken out for him and dusted,
-";
+");
         assert_eq_printed!(expected, got);
     }
 
@@ -3553,10 +3678,12 @@ Holmeses, success in the province of detective work must always
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 but Doctor Watson xxx taken out for him and [... 1 more match]
 and xxx clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3578,12 +3705,14 @@ and xxx clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:doctah Watsons MD
 1:doctah  MD
 3:doctah  MD
 5:doctah Watson MD
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3605,12 +3734,14 @@ and xxx clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1:For the doctah Watsons MD of this world, as opposed to the doctah  MD
 1:For the doctah Watsons MD of this world, as opposed to the doctah  MD
 3:be, to a very large extent, the result of luck. doctah  MD Holmes
 5:but doctah Watson MD has to have it taken out for him and dusted,
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3630,12 +3761,14 @@ and xxx clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 2:Holmeses, success in the province of detective work must always
 4:can extract a clew from a wisp of straw or a flake of cigar ash;
 5:but Doctor Watson has to have it taken out for him and dusted,
 6:and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3656,12 +3789,14 @@ and xxx clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 2:Holmeses, success in the province of detective work must always
 4:can extract a clew from a wisp of straw or a flake of cigar ash;
 5:but Doctor Watson has to have it taken out for him and dusted,
 6:and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3683,14 +3818,16 @@ and xxx clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1-For the Doctor Watsons of this world, as opposed to the Sherlock
 2:Holmeses, success in the province of detective work must always
 3-be, to a very large extent, the result of luck. Sherlock Holmes
 4:can extract a clew from a wisp of straw or a flake of cigar ash;
 5:but Doctor Watson has to have it taken out for him and dusted,
 6:and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3713,14 +3850,16 @@ and xxx clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1-For the Doctor Watsons of this world, as opposed to the Sherlock
 2:Holmeses, success in the province of detective work must always
 3-be, to a very large extent, the result of luck. Sherlock Holmes
 4:can extract a clew from a wisp of straw or a flake of cigar ash;
 5:but Doctor Watson has to have it taken out for him and dusted,
 6:and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3744,14 +3883,16 @@ and xxx clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1-Sherlock
 2:Holmeses, success in the province of detective work must always
 3-Sherlock
 4:can extract a clew from a wisp of straw or a flake of cigar ash;
 5:but Doctor Watson has to have it taken out for him and dusted,
 6:and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3776,14 +3917,16 @@ and xxx clearly, with a label attached.
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "\
+        let expected = expected_contents(
+            "\
 1-Sherlock
 2:Holmeses, success in the province of detective work must always
 3-Sherlock
 4:can extract a clew from a wisp of straw or a flake of cigar ash;
 5:but Doctor Watson has to have it taken out for him and dusted,
 6:and exhibited clearly, with a label attached.
-";
+",
+        );
         assert_eq_printed!(expected, got);
     }
 
@@ -3836,7 +3979,7 @@ e
             .unwrap();
 
         let got = printer_contents(&mut printer);
-        let expected = "4:d\n5-e\n6:d\n";
+        let expected = expected_contents("4:d\n5-e\n6:d\n");
         assert_eq_printed!(expected, got);
     }
 }
