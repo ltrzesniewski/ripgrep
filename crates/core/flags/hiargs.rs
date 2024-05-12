@@ -598,6 +598,11 @@ impl HiArgs {
         &self,
         wtr: W,
     ) -> grep::printer::Standard<W> {
+        let line_term = if self.null_data {
+            grep::matcher::LineTerminator::byte(b'\x00')
+        } else {
+            grep::matcher::LineTerminator::byte(b'\n')
+        };
         let mut builder = grep::printer::StandardBuilder::new();
         builder
             .byte_offset(self.byte_offset)
@@ -605,6 +610,7 @@ impl HiArgs {
             .column(self.column)
             .heading(self.heading)
             .hyperlink(self.hyperlink_config.clone())
+            .line_terminator(line_term)
             .max_columns_preview(self.max_columns_preview)
             .max_columns(self.max_columns)
             .max_matches(self.max_count)

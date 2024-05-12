@@ -480,7 +480,7 @@ rgtest!(f416_crlf, |dir: Dir, mut cmd: TestCommand| {
     cmd.arg("--crlf").arg(r"Sherlock$").arg("sherlock");
 
     let expected = "\
-For the Doctor Watsons of this world, as opposed to the Sherlock\r
+For the Doctor Watsons of this world, as opposed to the Sherlock
 ";
     eqnice!(expected, cmd.stdout());
 });
@@ -491,7 +491,7 @@ rgtest!(f416_crlf_multiline, |dir: Dir, mut cmd: TestCommand| {
     cmd.arg("--crlf").arg("-U").arg(r"Sherlock$").arg("sherlock");
 
     let expected = "\
-For the Doctor Watsons of this world, as opposed to the Sherlock\r
+For the Doctor Watsons of this world, as opposed to the Sherlock
 ";
     eqnice!(expected, cmd.stdout());
 });
@@ -502,7 +502,7 @@ rgtest!(f416_crlf_only_matching, |dir: Dir, mut cmd: TestCommand| {
     cmd.arg("--crlf").arg("-o").arg(r"Sherlock$").arg("sherlock");
 
     let expected = "\
-Sherlock\r
+Sherlock
 ";
     eqnice!(expected, cmd.stdout());
 });

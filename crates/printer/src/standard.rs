@@ -9,7 +9,7 @@ use std::{
 
 use {
     bstr::ByteSlice,
-    grep_matcher::{Match, Matcher},
+    grep_matcher::{LineTerminator, Match, Matcher},
     grep_searcher::{
         LineStep, Searcher, Sink, SinkContext, SinkContextKind, SinkFinish,
         SinkMatch,
@@ -56,6 +56,7 @@ struct Config {
     separator_field_context: Arc<Vec<u8>>,
     separator_path: Option<u8>,
     path_terminator: Option<u8>,
+    line_terminator: LineTerminator,
 }
 
 impl Default for Config {
@@ -82,6 +83,7 @@ impl Default for Config {
             separator_field_context: Arc::new(b"-".to_vec()),
             separator_path: None,
             path_terminator: None,
+            line_terminator: LineTerminator::default(),
         }
     }
 }
@@ -472,6 +474,17 @@ impl StandardBuilder {
         terminator: Option<u8>,
     ) -> &mut StandardBuilder {
         self.config.path_terminator = terminator;
+        self
+    }
+
+    /// Set the line terminator to use.
+    ///
+    /// The default line terminator is `\n` on all platforms.
+    pub fn line_terminator(
+        &mut self,
+        terminator: LineTerminator,
+    ) -> &mut StandardBuilder {
+        self.config.line_terminator = terminator;
         self
     }
 }
@@ -1256,7 +1269,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
 
     #[inline(always)]
     fn write_line(&self, line: &[u8]) -> io::Result<()> {
-        let line = if !self.config().trim_ascii {
+        let mut line = if !self.config().trim_ascii {
             line
         } else {
             let lineterm = self.searcher.line_terminator();
@@ -1274,6 +1287,9 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
             )?;
         } else {
             // self.write_trim(line)?;
+            if cfg!(windows) && line.ends_with(b"\r\n") {
+                line = &line[..line.len() - 2];
+            }
             self.write(line)?;
             if !self.has_line_terminator(line) {
                 self.write_line_term()?;
@@ -1491,7 +1507,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     }
 
     fn write_line_term(&self) -> io::Result<()> {
-        self.write(self.searcher.line_terminator().as_bytes())
+        self.write(self.config().line_terminator.as_bytes())
     }
 
     fn write_spec(&self, spec: &ColorSpec, buf: &[u8]) -> io::Result<()> {
@@ -1563,7 +1579,7 @@ impl<'a, M: Matcher, W: WriteColor> StandardImpl<'a, M, W> {
     }
 
     fn has_line_terminator(&self, buf: &[u8]) -> bool {
-        self.searcher.line_terminator().is_suffix(buf)
+        self.config().line_terminator.is_suffix(buf)
     }
 
     fn is_context(&self) -> bool {
@@ -3440,6 +3456,7 @@ Holmeses, success in the province of detective work must always
             .unwrap();
         let mut printer = StandardBuilder::new()
             .replacement(Some(b"?".to_vec()))
+            .line_terminator(LineTerminator::byte(b'\x00'))
             .build(NoColor::new(vec![]));
         SearcherBuilder::new()
             .line_terminator(LineTerminator::byte(b'\x00'))

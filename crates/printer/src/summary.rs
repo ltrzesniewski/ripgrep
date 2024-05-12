@@ -561,13 +561,13 @@ impl<'p, 's, M: Matcher, W: WriteColor> SummarySink<'p, 's, M, W> {
     /// write that path to the underlying writer followed by a line terminator.
     /// (If a path terminator is set, then that is used instead of the line
     /// terminator.)
-    fn write_path_line(&mut self, searcher: &Searcher) -> io::Result<()> {
+    fn write_path_line(&mut self) -> io::Result<()> {
         if self.path.is_some() {
             self.write_path()?;
             if let Some(term) = self.summary.config.path_terminator {
                 self.write(&[term])?;
             } else {
-                self.write_line_term(searcher)?;
+                self.write_line_term()?;
             }
         }
         Ok(())
@@ -624,9 +624,9 @@ impl<'p, 's, M: Matcher, W: WriteColor> SummarySink<'p, 's, M, W> {
         self.interpolator.finish(status, &mut *self.summary.wtr.borrow_mut())
     }
 
-    /// Write the line terminator configured on the given searcher.
-    fn write_line_term(&self, searcher: &Searcher) -> io::Result<()> {
-        self.write(searcher.line_terminator().as_bytes())
+    /// Write the `\n` line terminator.
+    fn write_line_term(&self) -> io::Result<()> {
+        self.write(b"\n")
     }
 
     /// Write the given bytes using the give style.
@@ -774,7 +774,7 @@ impl<'p, 's, M: Matcher, W: WriteColor> Sink for SummarySink<'p, 's, M, W> {
                 if show_count {
                     self.write_path_field()?;
                     self.write(self.match_count.to_string().as_bytes())?;
-                    self.write_line_term(searcher)?;
+                    self.write_line_term()?;
                 }
             }
             SummaryKind::CountMatches => {
@@ -785,17 +785,17 @@ impl<'p, 's, M: Matcher, W: WriteColor> Sink for SummarySink<'p, 's, M, W> {
                         .as_ref()
                         .expect("CountMatches should enable stats tracking");
                     self.write(stats.matches().to_string().as_bytes())?;
-                    self.write_line_term(searcher)?;
+                    self.write_line_term()?;
                 }
             }
             SummaryKind::PathWithMatch => {
                 if self.match_count > 0 {
-                    self.write_path_line(searcher)?;
+                    self.write_path_line()?;
                 }
             }
             SummaryKind::PathWithoutMatch => {
                 if self.match_count == 0 {
-                    self.write_path_line(searcher)?;
+                    self.write_path_line()?;
                 }
             }
             SummaryKind::Quiet => {}
