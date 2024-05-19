@@ -12,6 +12,7 @@ use crate::flags::{defs::FLAGS, doc::version, Category, Flag};
 
 const TEMPLATE_SHORT: &'static str = include_str!("template.short.help");
 const TEMPLATE_LONG: &'static str = include_str!("template.long.help");
+const TEMPLATE_FLAG: &'static str = include_str!("template.flag.help");
 
 /// Wraps `std::write!` and asserts there is no failure.
 ///
@@ -115,7 +116,7 @@ pub(crate) fn generate_long() -> String {
         if !cat.is_empty() {
             write!(cat, "\n\n");
         }
-        generate_long_flag(flag, &mut cat);
+        append_long_flag_content(flag, true, &mut cat);
     }
 
     let mut out =
@@ -127,17 +128,44 @@ pub(crate) fn generate_long() -> String {
     out
 }
 
+/// Generate long documentation for a set of flags, i.e., for `--help-flag`.
+///
+/// `name` should be the long flag name, without the `--`.
+pub(crate) fn generate_long_flag(names: &Vec<&'static str>) -> String {
+    let mut out = String::new();
+
+    if names.is_empty() {
+        write!(out, "Please specify a flag to get help for.");
+    } else {
+        for &name in names {
+            if let Some(&flag) = FLAGS.iter().find(|&f| f.name_long() == name)
+            {
+                append_long_flag_content(flag, false, &mut out);
+            } else {
+                write!(out, "flag not found: --{}", name);
+            }
+            write!(out, "\n\n");
+        }
+    }
+
+    TEMPLATE_FLAG
+        .replace("!!VERSION!!", &version::generate_digits())
+        .replace("!!flag!!", &out.trim_end())
+}
+
 /// Write generated documentation for `flag` to `out`.
-fn generate_long_flag(flag: &dyn Flag, out: &mut String) {
+fn append_long_flag_content(flag: &dyn Flag, indent: bool, out: &mut String) {
+    let indent_str = " ".repeat(if indent { 4 } else { 0 });
     if let Some(byte) = flag.name_short() {
         let name = char::from(byte);
-        write!(out, r"    -{name}");
+        write!(out, r"{}", &indent_str);
+        write!(out, r"-{name}");
         if let Some(var) = flag.doc_variable() {
             write!(out, r" {var}");
         }
         write!(out, r", ");
     } else {
-        write!(out, r"    ");
+        write!(out, r"{}", &indent_str);
     }
 
     let name = flag.name_long();
@@ -183,7 +211,7 @@ fn generate_long_flag(flag: &dyn Flag, out: &mut String) {
             write!(cleaned, "\n\nThis flag can be disabled with --{negated}.");
         }
     }
-    let indent = " ".repeat(8);
+    let indent_str = " ".repeat(if indent { 8 } else { 4 });
     let wrapopts = textwrap::Options::new(71)
         // Normally I'd be fine with breaking at hyphens, but ripgrep's docs
         // includes a lot of flag names, and they in turn contain hyphens.
@@ -197,11 +225,11 @@ fn generate_long_flag(flag: &dyn Flag, out: &mut String) {
         if paragraph.lines().all(|line| line.starts_with("    ")) {
             // Re-indent but don't refill so as to preserve line breaks
             // in code/shell example snippets.
-            new = textwrap::indent(&new, &indent);
+            new = textwrap::indent(&new, &indent_str);
         } else {
             new = new.replace("\n", " ");
             new = textwrap::refill(&new, &wrapopts);
-            new = textwrap::indent(&new, &indent);
+            new = textwrap::indent(&new, &indent_str);
         }
         write!(out, "{}", new.trim_end());
     }

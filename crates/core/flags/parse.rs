@@ -223,7 +223,8 @@ impl Parser {
         I: IntoIterator<Item = O>,
         O: Into<OsString>,
     {
-        let mut p = lexopt::Parser::from_args(rawargs);
+        let arg_list = rawargs.into_iter().map(Into::into).collect::<Vec<_>>();
+        let mut p = lexopt::Parser::from_args(&arg_list);
         while let Some(arg) = p.next().context("invalid CLI arguments")? {
             let lookup = match arg {
                 lexopt::Arg::Value(value) => {
@@ -254,6 +255,13 @@ impl Parser {
                     // based on whether short or long flag is given.
                     args.special = Some(SpecialMode::VersionLong);
                     continue;
+                }
+                lexopt::Arg::Long(name) if name == "help-flag" => {
+                    // Special case --help-flag since it consumes other flags.
+                    args.special = Some(SpecialMode::HelpFlag(
+                        self.parse_help_flag(&arg_list),
+                    ));
+                    return Ok(());
                 }
                 lexopt::Arg::Long(name) => self.find_long(name),
             };
@@ -309,6 +317,29 @@ impl Parser {
             return FlagLookup::UnrecognizedLong(name.to_string());
         };
         FlagLookup::Match(&self.info[index])
+    }
+
+    fn parse_help_flag(&self, arg_list: &Vec<OsString>) -> Vec<&'static str> {
+        let mut result = vec![];
+        let mut has_seen_help_flag = false;
+        let mut p = lexopt::Parser::from_args(arg_list);
+        while let Ok(Some(arg)) = p.next() {
+            let lookup = match arg {
+                lexopt::Arg::Value(_) => continue,
+                lexopt::Arg::Short(ch) => self.find_short(ch),
+                lexopt::Arg::Long(name) => {
+                    if name == "help-flag" && !has_seen_help_flag {
+                        has_seen_help_flag = true;
+                        continue;
+                    }
+                    self.find_long(name)
+                }
+            };
+            if let FlagLookup::Match(mat) = lookup {
+                result.push(mat.flag.name_long());
+            }
+        }
+        result
     }
 }
 

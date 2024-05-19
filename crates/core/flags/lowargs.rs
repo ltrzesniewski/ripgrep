@@ -118,7 +118,7 @@ pub(crate) struct LowArgs {
 /// fail too, but usually not in a way that can't be worked around by removing
 /// the corresponding arguments from the CLI command.) This is overall a hedge
 /// to ensure that version and help information are basically always available.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum SpecialMode {
     /// Show a condensed version of "help" output. Generally speaking, this
     /// shows each flag and an extremely terse description of that flag on
@@ -127,6 +127,10 @@ pub(crate) enum SpecialMode {
     /// Shows a very verbose version of the "help" output. The docs for some
     /// flags will be paragraphs long. This corresponds to the `--help` flag.
     HelpLong,
+    /// Shows a very verbose version of the "help" output for a set of flags.
+    /// This corresponds to the `--help-flag` flag. The argument is the list
+    /// of the long names of the flags to show help for.
+    HelpFlag(Vec<&'static str>),
     /// Show condensed version information. e.g., `ripgrep x.y.z`.
     VersionShort,
     /// Show verbose version information. Includes "short" information as well

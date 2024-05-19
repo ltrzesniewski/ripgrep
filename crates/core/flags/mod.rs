@@ -25,6 +25,7 @@ pub(crate) use crate::flags::{
     doc::{
         help::{
             generate_long as generate_help_long,
+            generate_long_flag as generate_help_flag,
             generate_short as generate_help_short,
         },
         man::generate as generate_man_page,

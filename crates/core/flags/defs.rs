@@ -76,6 +76,7 @@ pub(super) const FLAGS: &[&dyn Flag] = &[
     &GlobCaseInsensitive,
     &Heading,
     &Help,
+    &HelpFlag,
     &Hidden,
     &HostnameBin,
     &HyperlinkFormat,
@@ -2716,6 +2717,49 @@ fn test_help() {
 
     let args = parse_low_raw(["--help", "-h"]).unwrap();
     assert_eq!(Some(SpecialMode::HelpShort), args.special);
+}
+
+/// --help-flag
+#[derive(Debug)]
+struct HelpFlag;
+
+impl Flag for HelpFlag {
+    fn is_switch(&self) -> bool {
+        true
+    }
+    fn name_long(&self) -> &'static str {
+        "help-flag"
+    }
+    fn doc_category(&self) -> Category {
+        Category::Output
+    }
+    fn doc_short(&self) -> &'static str {
+        r"Show help output for a given flag or set of flags."
+    }
+    fn doc_long(&self) -> &'static str {
+        r#"
+This flag prints the help output for a given flag or set of flags.
+.sp
+This flag should be used along with other flags, and when
+found, it will show the verbose help output for those flags.
+"#
+    }
+
+    fn update(&self, v: FlagValue, _: &mut LowArgs) -> anyhow::Result<()> {
+        assert!(v.unwrap_switch(), "--help-flag has no negation");
+        // This flag is handled as a special case in the parser.
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn test_help_flag() {
+    let args = parse_low_raw(["--help-flag", "--encoding"]).unwrap();
+    assert_eq!(Some(SpecialMode::HelpFlag(vec!["encoding"])), args.special);
+
+    let args = parse_low_raw(["--no-encoding", "--help-flag"]).unwrap();
+    assert_eq!(Some(SpecialMode::HelpFlag(vec!["encoding"])), args.special);
 }
 
 /// -./--hidden
