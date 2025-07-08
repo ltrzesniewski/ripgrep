@@ -21,6 +21,20 @@ const HYPERLINK_PATTERN_ALIASES: &[(&str, &str)] = &[
     ("vscodium", "vscodium://file{path}:{line}:{column}"),
 ];
 
+const ALIAS_COUNT: usize = HYPERLINK_PATTERN_ALIASES.len();
+
+const ALIAS_NAMES: &[&str] = &{
+    let mut names = [""; ALIAS_COUNT];
+    let mut i = 0;
+
+    while i < ALIAS_COUNT {
+        names[i] = HYPERLINK_PATTERN_ALIASES[i].0;
+        i += 1;
+    }
+
+    names
+};
+
 /// Look for the hyperlink format defined by the given alias name.
 ///
 /// If one does not exist, `None` is returned.
@@ -34,6 +48,11 @@ pub(crate) fn find(name: &str) -> Option<&str> {
 /// Return an iterator over all available alias names and their definitions.
 pub(crate) fn iter() -> impl Iterator<Item = (&'static str, &'static str)> {
     HYPERLINK_PATTERN_ALIASES.iter().copied()
+}
+
+/// Return a static list of alias names.
+pub(crate) fn alias_names() -> &'static [&'static str] {
+    ALIAS_NAMES
 }
 
 #[cfg(test)]

@@ -90,6 +90,11 @@ impl HyperlinkFormat {
     pub(crate) fn is_line_dependent(&self) -> bool {
         self.is_line_dependent
     }
+
+    /// Returns a static list of known alias names.
+    pub fn alias_names() -> &'static [&'static str] {
+        hyperlink_aliases::alias_names()
+    }
 }
 
 impl std::str::FromStr for HyperlinkFormat {

@@ -2953,6 +2953,10 @@ https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
 "#
     }
 
+    fn doc_choices(&self) -> &'static [&'static str] {
+        grep::printer::HyperlinkFormat::alias_names()
+    }
+
     fn update(&self, v: FlagValue, args: &mut LowArgs) -> anyhow::Result<()> {
         let v = v.unwrap_value();
         let string = convert::str(&v)?;
@@ -7665,9 +7669,10 @@ mod tests {
                 assert!(
                     choice.chars().all(|c| c.is_ascii_alphanumeric()
                         || c == '-'
+                        || c == '+'
                         || c == ':'),
                     "choice '{choice}' for flag '{long}' does not match \
-                     ^[-:0-9A-Za-z]+$",
+                     ^[-+:0-9A-Za-z]+$",
                 )
             }
         }
