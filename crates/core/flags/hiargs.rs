@@ -1149,13 +1149,42 @@ impl Paths {
         paths: &mut Vec<PathBuf>,
         input: InputSource,
     ) -> anyhow::Result<()> {
+        enum SplitKind {
+            Line,
+            Nul,
+        }
+
+        let (path, split, flag) = match &input {
+            InputSource::TextFile(path) => (path, SplitKind::Line, "--in"),
+            InputSource::BinaryFile(path) => (path, SplitKind::Nul, "--in0"),
+        };
+
+        fn read_records(
+            read: impl std::io::Read,
+            split: SplitKind,
+            mut f: impl FnMut(&[u8]) -> std::io::Result<()>,
+        ) -> std::io::Result<()> {
+            let mut br = std::io::BufReader::new(read);
+            match split {
+                SplitKind::Line => br.for_byte_line(|line| {
+                    f(line)?;
+                    Ok(true)
+                })?,
+                SplitKind::Nul => br.for_byte_record(0, |rec| {
+                    f(rec)?;
+                    Ok(true)
+                })?,
+            }
+            Ok(())
+        }
+
         let mut add_line =
             |line: &[u8], path: &Path| -> Result<(), std::io::Error> {
                 #[cfg(not(any(unix, windows)))]
                 {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        "--in/--in0 are not supported on this platform",
+                        "{flag} is not supported on this platform",
                     ));
                 }
                 if line.is_empty() {
@@ -1171,7 +1200,8 @@ impl Paths {
                         std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
                             format!(
-                                "error reading --in/--in0 from {}: {}",
+                                "error reading {} from {}: {}",
+                                flag,
                                 path.display(),
                                 err
                             ),
@@ -1182,71 +1212,25 @@ impl Paths {
                 Ok(())
             };
 
-        match input {
-            InputSource::TextFile(path) => {
-                if path == Path::new("-") {
-                    anyhow::ensure!(
-                        !state.stdin_consumed,
-                        "error reading --in from stdin: stdin \
-                         has already been consumed"
-                    );
-
-                    let stdin = std::io::stdin();
-                    let locked = stdin.lock();
-                    std::io::BufReader::new(locked).for_byte_line(|line| {
-                        add_line(line, &PathBuf::from("stdin"))?;
-                        Ok(true)
-                    })?;
-
-                    state.stdin_consumed = true;
-                } else {
-                    let file = std::fs::File::open(&path).map_err(|err| {
-                        std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!("{}: {}", path.display(), err),
-                        )
-                    })?;
-                    std::io::BufReader::new(file).for_byte_line(|line| {
-                        add_line(line, &path)?;
-                        Ok(true)
-                    })?;
-                }
-            }
-            InputSource::BinaryFile(path) => {
-                if path == Path::new("-") {
-                    anyhow::ensure!(
-                        !state.stdin_consumed,
-                        "error reading --in0 from stdin: stdin \
-                         has already been consumed"
-                    );
-
-                    let stdin = std::io::stdin();
-                    let locked = stdin.lock();
-                    std::io::BufReader::new(locked).for_byte_record(
-                        0,
-                        |line| {
-                            add_line(line, &PathBuf::from("stdin"))?;
-                            Ok(true)
-                        },
-                    )?;
-
-                    state.stdin_consumed = true;
-                } else {
-                    let file = std::fs::File::open(&path).map_err(|err| {
-                        std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!("{}: {}", path.display(), err),
-                        )
-                    })?;
-                    std::io::BufReader::new(file).for_byte_record(
-                        0,
-                        |line| {
-                            add_line(line, &path)?;
-                            Ok(true)
-                        },
-                    )?;
-                }
-            }
+        if path == Path::new("-") {
+            anyhow::ensure!(
+                !state.stdin_consumed,
+                "error reading {flag} from stdin: stdin \
+                 has already been consumed"
+            );
+            let stdin = std::io::stdin();
+            let locked = stdin.lock();
+            let path_display = Path::new("stdin");
+            read_records(locked, split, |line| add_line(line, path_display))?;
+            state.stdin_consumed = true;
+        } else {
+            let file = std::fs::File::open(path).map_err(|err| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("{}: {}", path.display(), err),
+                )
+            })?;
+            read_records(file, split, |line| add_line(line, path))?;
         }
         Ok(())
     }
