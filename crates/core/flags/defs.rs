@@ -25,9 +25,9 @@ use crate::flags::{
     Category, Flag, FlagValue,
     lowargs::{
         BinaryMode, BoundaryMode, BufferMode, CaseMode, ColorChoice,
-        ContextMode, EncodingMode, EngineChoice, GenerateMode, LoggingMode,
-        LowArgs, MmapMode, Mode, PatternSource, SearchMode, SortMode,
-        SortModeKind, SpecialMode, TypeChange,
+        ContextMode, EncodingMode, EngineChoice, GenerateMode, InputSource,
+        LoggingMode, LowArgs, MmapMode, Mode, PatternSource, SearchMode,
+        SortMode, SortModeKind, SpecialMode, TypeChange,
     },
 };
 
@@ -83,6 +83,8 @@ pub(super) const FLAGS: &[&dyn Flag] = &[
     &IgnoreCase,
     &IgnoreFile,
     &IgnoreFileCaseInsensitive,
+    &In,
+    &In0,
     &IncludeZero,
     &InvertMatch,
     &JSON,
@@ -3323,6 +3325,171 @@ fn test_ignore_file_case_insensitive() {
     ])
     .unwrap();
     assert_eq!(true, args.ignore_file_case_insensitive);
+}
+
+/// --in
+#[derive(Debug)]
+struct In;
+
+impl Flag for In {
+    fn is_switch(&self) -> bool {
+        false
+    }
+    fn name_long(&self) -> &'static str {
+        "in"
+    }
+    fn doc_variable(&self) -> Option<&'static str> {
+        Some("INPUTFILE")
+    }
+    fn doc_category(&self) -> Category {
+        Category::Input
+    }
+    fn doc_short(&self) -> &'static str {
+        r"Read paths to search from the given text file."
+    }
+    fn doc_long(&self) -> &'static str {
+        r"
+Includes paths to search from the given file, with one path per line.
+.sp
+When this flag is used multiple times or in combination with the \flag{in0}
+flag, then all files provided are searched in addition to the paths in the
+positional arguments.
+.sp
+Empty lines will be ignored, and the newline (LF or CRLF) is not counted as
+part of the path. Use \flag{in0} if the provided paths may contain newlines.
+.sp
+When \fIINPUTFILE\fP is \fB-\fP, then \fBstdin\fP will be read for the files.
+"
+    }
+    fn completion_type(&self) -> CompletionType {
+        CompletionType::Filename
+    }
+
+    fn update(&self, v: FlagValue, args: &mut LowArgs) -> anyhow::Result<()> {
+        let path = PathBuf::from(v.unwrap_value());
+        args.inputs.push(InputSource::TextFile(path));
+        Ok(())
+    }
+}
+
+/// --in0
+#[derive(Debug)]
+struct In0;
+
+impl Flag for In0 {
+    fn is_switch(&self) -> bool {
+        false
+    }
+    fn name_long(&self) -> &'static str {
+        "in0"
+    }
+    fn doc_variable(&self) -> Option<&'static str> {
+        Some("INPUTFILE")
+    }
+    fn doc_category(&self) -> Category {
+        Category::Input
+    }
+    fn doc_short(&self) -> &'static str {
+        r"Read paths to search from the given binary file."
+    }
+    fn doc_long(&self) -> &'static str {
+        r"
+Includes paths to search from the given file, separated by \fBNUL\fP bytes.
+.sp
+When this flag is used multiple times or in combination with the \flag{in}
+flag, then all files provided are searched in addition to the paths in the
+positional arguments.
+.sp
+When \fIINPUTFILE\fP is \fB-\fP, then \fBstdin\fP will be read for the files.
+"
+    }
+    fn completion_type(&self) -> CompletionType {
+        CompletionType::Filename
+    }
+
+    fn update(&self, v: FlagValue, args: &mut LowArgs) -> anyhow::Result<()> {
+        let path = PathBuf::from(v.unwrap_value());
+        args.inputs.push(InputSource::BinaryFile(path));
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn test_in_in0() {
+    let args = parse_low_raw(None::<&str>).unwrap();
+    assert_eq!(Vec::<InputSource>::new(), args.inputs);
+
+    let args = parse_low_raw(["--in", "foo"]).unwrap();
+    assert_eq!(vec![InputSource::TextFile(PathBuf::from("foo"))], args.inputs);
+
+    let args = parse_low_raw(["--in0", "foo"]).unwrap();
+    assert_eq!(
+        vec![InputSource::BinaryFile(PathBuf::from("foo"))],
+        args.inputs
+    );
+
+    let args = parse_low_raw(["--in=foo"]).unwrap();
+    assert_eq!(vec![InputSource::TextFile(PathBuf::from("foo"))], args.inputs);
+
+    let args = parse_low_raw(["--in0=foo"]).unwrap();
+    assert_eq!(
+        vec![InputSource::BinaryFile(PathBuf::from("foo"))],
+        args.inputs
+    );
+
+    let args = parse_low_raw(["--in", "-foo"]).unwrap();
+    assert_eq!(
+        vec![InputSource::TextFile(PathBuf::from("-foo"))],
+        args.inputs
+    );
+
+    let args = parse_low_raw(["--in0", "-foo"]).unwrap();
+    assert_eq!(
+        vec![InputSource::BinaryFile(PathBuf::from("-foo"))],
+        args.inputs
+    );
+
+    let args = parse_low_raw(["--in=-foo"]).unwrap();
+    assert_eq!(
+        vec![InputSource::TextFile(PathBuf::from("-foo"))],
+        args.inputs
+    );
+
+    let args = parse_low_raw(["--in0=-foo"]).unwrap();
+    assert_eq!(
+        vec![InputSource::BinaryFile(PathBuf::from("-foo"))],
+        args.inputs
+    );
+
+    let args =
+        parse_low_raw(["--in=foo", "--in0", "bar", "--in", "baz"]).unwrap();
+    assert_eq!(
+        vec![
+            InputSource::TextFile(PathBuf::from("foo")),
+            InputSource::BinaryFile(PathBuf::from("bar")),
+            InputSource::TextFile(PathBuf::from("baz")),
+        ],
+        args.inputs
+    );
+
+    let args = parse_low_raw(["--in=-"]).unwrap();
+    assert_eq!(vec![InputSource::TextFile(PathBuf::from("-")),], args.inputs);
+
+    let args = parse_low_raw(["--in", "-"]).unwrap();
+    assert_eq!(vec![InputSource::TextFile(PathBuf::from("-")),], args.inputs);
+
+    let args = parse_low_raw(["--in0=-"]).unwrap();
+    assert_eq!(
+        vec![InputSource::BinaryFile(PathBuf::from("-")),],
+        args.inputs
+    );
+
+    let args = parse_low_raw(["--in0", "-"]).unwrap();
+    assert_eq!(
+        vec![InputSource::BinaryFile(PathBuf::from("-")),],
+        args.inputs
+    );
 }
 
 /// --include-zero
