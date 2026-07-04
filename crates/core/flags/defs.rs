@@ -3352,11 +3352,13 @@ impl Flag for In {
 Includes paths to search from the given file, with one path per line.
 .sp
 When this flag is used multiple times or in combination with the \flag{in0}
-flag, then all files provided are searched in addition to the paths in the
+flag, then all provided files are searched in addition to the paths in the
 positional arguments.
 .sp
-Empty lines will be ignored, and the newline (LF or CRLF) is not counted as
-part of the path. Use \flag{in0} if the provided paths may contain newlines.
+Empty lines are ignored, and newlines (both LF and CRLF) are not counted as
+part of the path. The rest of the path name is decoded as UTF-8 on Windows
+and taken as-is on Unix systems.
+Use the \flag{in0} flag to use \fBNUL\fP as separator.
 .sp
 When \fIINPUTFILE\fP is \fB-\fP, then \fBstdin\fP will be read for the files.
 "
@@ -3397,8 +3399,11 @@ impl Flag for In0 {
 Includes paths to search from the given file, separated by \fBNUL\fP bytes.
 .sp
 When this flag is used multiple times or in combination with the \flag{in}
-flag, then all files provided are searched in addition to the paths in the
+flag, then all provided files are searched in addition to the paths in the
 positional arguments.
+.sp
+Empty entries are ignored. The path names are decoded as UTF-8 on Windows
+and taken as-is on Unix systems.
 .sp
 When \fIINPUTFILE\fP is \fB-\fP, then \fBstdin\fP will be read for the files.
 "

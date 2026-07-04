@@ -8,7 +8,7 @@ use std::{
 };
 
 use {
-    bstr::BString,
+    bstr::{BString, io::BufReadExt},
     grep::printer::{ColorSpecs, SummaryKind},
 };
 
@@ -16,8 +16,9 @@ use crate::{
     flags::lowargs::{
         BinaryMode, BoundaryMode, BufferMode, CaseMode, ColorChoice,
         ContextMode, ContextSeparator, EncodingMode, EngineChoice,
-        FieldContextSeparator, FieldMatchSeparator, LowArgs, MmapMode, Mode,
-        PatternSource, SearchMode, SortMode, SortModeKind, TypeChange,
+        FieldContextSeparator, FieldMatchSeparator, InputSource, LowArgs,
+        MmapMode, Mode, PatternSource, SearchMode, SortMode, SortModeKind,
+        TypeChange,
     },
     haystack::{Haystack, HaystackBuilder},
     search::{PatternMatcher, Printer, SearchWorker, SearchWorkerBuilder},
@@ -1068,22 +1069,27 @@ struct Paths {
 
 impl Paths {
     /// Drain the search paths out of the given low arguments.
+    ///
+    /// This includes collecting files from -in/--in0.
     fn from_low_args(
         state: &mut State,
         _: &Patterns,
         low: &mut LowArgs,
     ) -> anyhow::Result<Paths> {
         // We require a `&Patterns` even though we don't use it to ensure that
-        // patterns have already been read from LowArgs. This let's us safely
+        // patterns have already been read from LowArgs. This lets us safely
         // assume that all remaining positional arguments are intended to be
         // file paths.
 
         let mut paths = Vec::with_capacity(low.positional.len());
+        for input in low.inputs.drain(..) {
+            Self::read_from_file(state, &mut paths, input)?
+        }
         for osarg in low.positional.drain(..) {
             let path = PathBuf::from(osarg);
             if state.stdin_consumed && path == Path::new("-") {
                 anyhow::bail!(
-                    "error: attempted to read patterns from stdin \
+                    "error: attempted to read patterns or inputs from stdin \
                      while also searching stdin",
                 );
             }
@@ -1136,6 +1142,113 @@ impl Paths {
     /// Returns true if ripgrep will only search stdin and nothing else.
     fn is_only_stdin(&self) -> bool {
         self.paths.len() == 1 && self.paths[0] == Path::new("-")
+    }
+
+    fn read_from_file(
+        state: &mut State,
+        paths: &mut Vec<PathBuf>,
+        input: InputSource,
+    ) -> anyhow::Result<()> {
+        let mut add_line =
+            |line: &[u8], path: &Path| -> Result<(), std::io::Error> {
+                #[cfg(not(any(unix, windows)))]
+                {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "--in/--in0 are not supported on this platform",
+                    ));
+                }
+                if line.is_empty() {
+                    return Ok(());
+                }
+                #[cfg(unix)]
+                {
+                    paths.push(PathBuf::from(line));
+                }
+                #[cfg(windows)]
+                {
+                    let s = std::str::from_utf8(line).map_err(|err| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!(
+                                "error reading --in/--in0 from {}: {}",
+                                path.display(),
+                                err
+                            ),
+                        )
+                    })?;
+                    paths.push(PathBuf::from(s));
+                }
+                Ok(())
+            };
+
+        match input {
+            InputSource::TextFile(path) => {
+                if path == Path::new("-") {
+                    anyhow::ensure!(
+                        !state.stdin_consumed,
+                        "error reading --in from stdin: stdin \
+                         has already been consumed"
+                    );
+
+                    let stdin = std::io::stdin();
+                    let locked = stdin.lock();
+                    std::io::BufReader::new(locked).for_byte_line(|line| {
+                        add_line(line, &PathBuf::from("stdin"))?;
+                        Ok(true)
+                    })?;
+
+                    state.stdin_consumed = true;
+                } else {
+                    let file = std::fs::File::open(&path).map_err(|err| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("{}: {}", path.display(), err),
+                        )
+                    })?;
+                    std::io::BufReader::new(file).for_byte_line(|line| {
+                        add_line(line, &path)?;
+                        Ok(true)
+                    })?;
+                }
+            }
+            InputSource::BinaryFile(path) => {
+                if path == Path::new("-") {
+                    anyhow::ensure!(
+                        !state.stdin_consumed,
+                        "error reading --in0 from stdin: stdin \
+                         has already been consumed"
+                    );
+
+                    let stdin = std::io::stdin();
+                    let locked = stdin.lock();
+                    std::io::BufReader::new(locked).for_byte_record(
+                        0,
+                        |line| {
+                            add_line(line, &PathBuf::from("stdin"))?;
+                            Ok(true)
+                        },
+                    )?;
+
+                    state.stdin_consumed = true;
+                } else {
+                    let file = std::fs::File::open(&path).map_err(|err| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("{}: {}", path.display(), err),
+                        )
+                    })?;
+                    std::io::BufReader::new(file).for_byte_record(
+                        0,
+                        |line| {
+                            add_line(line, &path)?;
+                            Ok(true)
+                        },
+                    )?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
