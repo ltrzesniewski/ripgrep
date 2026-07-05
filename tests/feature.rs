@@ -1198,7 +1198,7 @@ rgtest!(
         dir.create("input", "foo");
         dir.create("bar", "match");
         cmd.arg("--in").arg("input").arg("match");
-        cmd.assert_non_empty_stderr();
+        cmd.assert_exit_code(2);
     }
 );
 
@@ -1208,7 +1208,7 @@ rgtest!(input_from_in_contains_nul_byte, |dir: Dir, mut cmd: TestCommand| {
     dir.create("foo", "match");
     dir.create("bar", "match");
     cmd.arg("--in").arg("input").arg("match");
-    cmd.assert_non_empty_stderr();
+    cmd.assert_exit_code(2);
 });
 
 // See: https://github.com/BurntSushi/ripgrep/issues/3459
@@ -1237,6 +1237,6 @@ rgtest!(
     |dir: Dir, mut cmd: TestCommand| {
         dir.create("input", "foo");
         cmd.arg("--in0").arg("input").arg("match");
-        cmd.assert_non_empty_stderr();
+        cmd.assert_exit_code(2);
     }
 );

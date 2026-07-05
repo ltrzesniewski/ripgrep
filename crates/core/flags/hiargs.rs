@@ -1149,7 +1149,7 @@ impl Paths {
     ///
     /// The goal is to reuse existing input file sets and to
     /// enable usage of chained ripgrep calls, such as
-    /// `rg foo -0 | rg bar --in0 -0 | rg baz --in0`
+    /// `rg foo -l0 | rg bar --in0=- -l0 | rg baz --in0=-`
     fn read_from_input(
         state: &mut State,
         input: &InputSource,
