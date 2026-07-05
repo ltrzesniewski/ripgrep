@@ -1083,7 +1083,7 @@ impl Paths {
 
         let mut paths = Vec::with_capacity(low.positional.len());
         for input in low.inputs.drain(..) {
-            Self::read_from_input(state, &mut paths, &input)?
+            Self::read_from_input(state, &input, &mut paths)?
         }
         for osarg in low.positional.drain(..) {
             let path = PathBuf::from(osarg);
@@ -1144,69 +1144,86 @@ impl Paths {
         self.paths.len() == 1 && self.paths[0] == Path::new("-")
     }
 
+    /// Reads the content of the `input` source specified through
+    /// an `--in` or `--in0` flag and adds its content to `output`.
+    ///
+    /// The goal is to reuse existing input file sets and to
+    /// enable usage of chained ripgrep calls, such as
+    /// `rg foo -0 | rg bar --in0 -0 | rg baz --in0`
     fn read_from_input(
         state: &mut State,
-        paths: &mut Vec<PathBuf>,
         input: &InputSource,
+        output: &mut Vec<PathBuf>,
     ) -> anyhow::Result<()> {
+        // We need to handle a combination of the following:
+        // - Text or binary files: LF/CRLF or NUL separators
+        // - Files or stdin: needs to handle `stdin_consumed`
+        // - Unix or Windows: different rules for `PathBuf`
+
         let (path, flag) = match input {
             InputSource::TextFile(path) => (path, "--in"),
             InputSource::BinaryFile(path) => (path, "--in0"),
         };
 
-        fn read_records(
+        #[cfg(not(any(unix, windows)))]
+        anyhow::bail!("{flag} is not supported on this platform");
+
+        // Reads paths from `read` using delimiters specified by `input`
+        // and calls `for_each_path` on each one of them.
+        fn read(
             read: impl std::io::Read,
             input: &InputSource,
-            mut func: impl FnMut(&[u8]) -> std::io::Result<()>,
-        ) -> std::io::Result<()> {
+            mut for_each_path: impl FnMut(&[u8]) -> std::io::Result<()>,
+        ) -> anyhow::Result<()> {
             let mut reader = std::io::BufReader::new(read);
             match input {
                 InputSource::TextFile(_) => reader.for_byte_line(|line| {
-                    func(line)?;
+                    for_each_path(line)?;
                     Ok(true)
                 })?,
                 InputSource::BinaryFile(_) => {
                     reader.for_byte_record(0, |record| {
-                        func(record)?;
+                        for_each_path(record)?;
                         Ok(true)
                     })?
                 }
-            }
+            };
             Ok(())
         }
 
-        let mut add_line =
-            |line: &[u8], path: &Path| -> Result<(), std::io::Error> {
-                #[cfg(not(any(unix, windows)))]
-                {
-                    return Err(std::io::Error::other(
-                        "--in and --in0 are not supported on this platform",
-                    ));
-                }
-                if line.is_empty() {
-                    return Ok(());
-                }
-                #[cfg(unix)]
-                {
-                    paths.push(PathBuf::from(line));
-                }
-                #[cfg(windows)]
-                {
-                    let s = std::str::from_utf8(line).map_err(|err| {
-                        std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!(
-                                "error reading {} from {}: {}",
-                                flag,
-                                path.display(),
-                                err
-                            ),
-                        )
-                    })?;
-                    paths.push(PathBuf::from(s));
-                }
-                Ok(())
-            };
+        // Adds a single `item` to `output`. The `path` parameter is
+        // only used for error reporting.
+        let mut add = |item: &[u8], path: &Path| -> std::io::Result<()> {
+            // Allow empty lines/records in input files.
+            if item.is_empty() {
+                return Ok(());
+            }
+            #[cfg(unix)]
+            {
+                // Unix allows any byte sequence in a file name except
+                // for NUL, so we can just use the raw bytes.
+                output.push(PathBuf::from(item));
+            }
+            #[cfg(windows)]
+            {
+                // On Windows, file names are stored in Unicode on newer
+                // file systems, so we interpret input data as UTF-8.
+                // Not only is it now the standard encoding for text,
+                // but it is also used by ripgrep for its output.
+                // This enables easy chaining of ripgrep calls.
+                // https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
+                let s = std::str::from_utf8(item).map_err(|err| {
+                    std::io::Error::other(format!(
+                        "error reading {} {}: {}",
+                        flag,
+                        path.display(),
+                        err
+                    ))
+                })?;
+                output.push(PathBuf::from(s));
+            }
+            Ok(())
+        };
 
         if path == Path::new("-") {
             anyhow::ensure!(
@@ -1217,11 +1234,11 @@ impl Paths {
             let stdin = std::io::stdin();
             let locked = stdin.lock();
             let path = Path::new("stdin");
-            read_records(locked, input, |item| add_line(item, path))?;
+            read(locked, input, |item| add(item, path))?;
             state.stdin_consumed = true;
         } else {
             let file = std::fs::File::open(path)?;
-            read_records(file, input, |item| add_line(item, path))?;
+            read(file, input, |item| add(item, path))?;
         }
         Ok(())
     }
