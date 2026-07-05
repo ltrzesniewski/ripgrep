@@ -1070,7 +1070,7 @@ struct Paths {
 impl Paths {
     /// Drain the search paths out of the given low arguments.
     ///
-    /// This includes collecting files from -in/--in0.
+    /// This includes collecting files from `--in`/`--in0`.
     fn from_low_args(
         state: &mut State,
         _: &Patterns,
