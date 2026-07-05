@@ -1203,6 +1203,42 @@ rgtest!(
 );
 
 // See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(
+    input_from_in_stdin_consumed_by_in,
+    |_dir: Dir, mut cmd: TestCommand| {
+        cmd.arg("--in").arg("-").arg("--in").arg("-").arg("match");
+        cmd.assert_exit_code(2);
+    }
+);
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(
+    input_from_in_stdin_consumed_by_in0,
+    |_dir: Dir, mut cmd: TestCommand| {
+        cmd.arg("--in0").arg("-").arg("--in").arg("-").arg("match");
+        cmd.assert_exit_code(2);
+    }
+);
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(
+    input_from_in_stdin_consumed_by_search,
+    |_dir: Dir, mut cmd: TestCommand| {
+        cmd.arg("--in").arg("-").arg("-").arg("match");
+        cmd.assert_exit_code(2);
+    }
+);
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(
+    input_from_in_stdin_consumed_by_file,
+    |_dir: Dir, mut cmd: TestCommand| {
+        cmd.arg("--file").arg("-").arg("--in").arg("-").arg("match");
+        cmd.assert_exit_code(2);
+    }
+);
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
 rgtest!(input_from_in_contains_nul_byte, |dir: Dir, mut cmd: TestCommand| {
     dir.create("input", "foo\x00bar");
     dir.create("foo", "match");
@@ -1237,6 +1273,42 @@ rgtest!(
     |dir: Dir, mut cmd: TestCommand| {
         dir.create("input", "foo");
         cmd.arg("--in0").arg("input").arg("match");
+        cmd.assert_exit_code(2);
+    }
+);
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(
+    input_from_in0_stdin_consumed_by_in,
+    |_dir: Dir, mut cmd: TestCommand| {
+        cmd.arg("--in").arg("-").arg("--in0").arg("-").arg("match");
+        cmd.assert_exit_code(2);
+    }
+);
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(
+    input_from_in0_stdin_consumed_by_in0,
+    |_dir: Dir, mut cmd: TestCommand| {
+        cmd.arg("--in0").arg("-").arg("--in0").arg("-").arg("match");
+        cmd.assert_exit_code(2);
+    }
+);
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(
+    input_from_in0_stdin_consumed_by_search,
+    |_dir: Dir, mut cmd: TestCommand| {
+        cmd.arg("--in0").arg("-").arg("-").arg("match");
+        cmd.assert_exit_code(2);
+    }
+);
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(
+    input_from_in0_stdin_consumed_by_file,
+    |_dir: Dir, mut cmd: TestCommand| {
+        cmd.arg("--file").arg("-").arg("--in0").arg("-").arg("match");
         cmd.assert_exit_code(2);
     }
 );
