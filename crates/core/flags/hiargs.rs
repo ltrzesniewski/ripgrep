@@ -1237,7 +1237,14 @@ impl Paths {
             read(locked, input, |item| add(item, path))?;
             state.stdin_consumed = true;
         } else {
-            let file = std::fs::File::open(path)?;
+            let file = std::fs::File::open(path).map_err(|err| {
+                std::io::Error::other(format!(
+                    "{} {}: {}",
+                    flag,
+                    path.display(),
+                    err
+                ))
+            })?;
             read(file, input, |item| add(item, path))?;
         }
         Ok(())

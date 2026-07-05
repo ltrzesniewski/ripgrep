@@ -1172,3 +1172,59 @@ rgtest!(stop_on_nonmatch, |dir: Dir, mut cmd: TestCommand| {
     cmd.args(&["--stop-on-nonmatch", "[235]"]);
     eqnice!("test:line2\ntest:line3\n", cmd.stdout());
 });
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(input_from_in, |dir: Dir, mut cmd: TestCommand| {
+    dir.create("input", "foo\nbar\r\nbaz\n\n\nqux");
+    dir.create("foo", "match");
+    dir.create("bar", "match");
+    dir.create("baz", "match");
+    dir.create("qux", "match");
+    dir.create("other", "match");
+    cmd.arg("--in").arg("input").arg("-l").arg("match");
+    eqnice!(sort_lines("foo\nbar\nbaz\nqux\n"), sort_lines(&cmd.stdout()));
+});
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(input_from_in_non_existing_file, |dir: Dir, mut cmd: TestCommand| {
+    cmd.arg("--in").arg("does_not_exist").arg("match");
+    cmd.assert_exit_code(2);
+});
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(
+    input_from_in_contains_non_existing_file,
+    |dir: Dir, mut cmd: TestCommand| {
+        dir.create("input", "foo");
+        dir.create("bar", "match");
+        cmd.arg("--in").arg("input").arg("match");
+        cmd.assert_non_empty_stderr();
+    }
+);
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(input_from_in0, |dir: Dir, mut cmd: TestCommand| {
+    dir.create("input", "foo\x00bar\x00\x00baz");
+    dir.create("foo", "match");
+    dir.create("bar", "match");
+    dir.create("baz", "match");
+    dir.create("other", "match");
+    cmd.arg("--in0").arg("input").arg("-l").arg("match");
+    eqnice!(sort_lines("foo\nbar\nbaz\n"), sort_lines(&cmd.stdout()));
+});
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(input_from_in0_non_existing_file, |dir: Dir, mut cmd: TestCommand| {
+    cmd.arg("--in0").arg("does_not_exist").arg("match");
+    cmd.assert_exit_code(2);
+});
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(
+    input_from_in0_contains_non_existing_file,
+    |dir: Dir, mut cmd: TestCommand| {
+        dir.create("input", "foo");
+        cmd.arg("--in0").arg("input").arg("match");
+        cmd.assert_non_empty_stderr();
+    }
+);
