@@ -1177,10 +1177,19 @@ impl Paths {
         ) -> anyhow::Result<()> {
             let mut reader = std::io::BufReader::new(read);
             match input {
-                InputSource::TextFile(_) => reader.for_byte_line(|line| {
-                    for_each_path(line)?;
-                    Ok(true)
-                })?,
+                InputSource::TextFile(path) => {
+                    reader.for_byte_line(|line| {
+                        if line.contains(&0u8) {
+                            return Err(std::io::Error::other(format!(
+                                "--in {}: file contains a NUL byte, \
+                                 did you intend to use --in0 instead?",
+                                path.display()
+                            )));
+                        }
+                        for_each_path(line)?;
+                        Ok(true)
+                    })?
+                }
                 InputSource::BinaryFile(_) => {
                     reader.for_byte_record(0, |record| {
                         for_each_path(record)?;

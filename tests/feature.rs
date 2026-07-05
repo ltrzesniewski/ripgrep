@@ -1203,6 +1203,15 @@ rgtest!(
 );
 
 // See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(input_from_in_contains_nul_byte, |dir: Dir, mut cmd: TestCommand| {
+    dir.create("input", "foo\x00bar");
+    dir.create("foo", "match");
+    dir.create("bar", "match");
+    cmd.arg("--in").arg("input").arg("match");
+    cmd.assert_non_empty_stderr();
+});
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
 rgtest!(input_from_in0, |dir: Dir, mut cmd: TestCommand| {
     dir.create("input", "foo\x00bar\x00\x00baz");
     dir.create("foo", "match");
