@@ -1083,7 +1083,7 @@ impl Paths {
 
         let mut paths = Vec::with_capacity(low.positional.len());
         for input in low.inputs.drain(..) {
-            Self::read_from_file(state, &mut paths, input)?
+            Self::read_from_input(state, &mut paths, &input)?
         }
         for osarg in low.positional.drain(..) {
             let path = PathBuf::from(osarg);
@@ -1144,36 +1144,33 @@ impl Paths {
         self.paths.len() == 1 && self.paths[0] == Path::new("-")
     }
 
-    fn read_from_file(
+    fn read_from_input(
         state: &mut State,
         paths: &mut Vec<PathBuf>,
-        input: InputSource,
+        input: &InputSource,
     ) -> anyhow::Result<()> {
-        enum SplitKind {
-            Line,
-            Nul,
-        }
-
-        let (path, split, flag) = match &input {
-            InputSource::TextFile(path) => (path, SplitKind::Line, "--in"),
-            InputSource::BinaryFile(path) => (path, SplitKind::Nul, "--in0"),
+        let (path, flag) = match input {
+            InputSource::TextFile(path) => (path, "--in"),
+            InputSource::BinaryFile(path) => (path, "--in0"),
         };
 
         fn read_records(
             read: impl std::io::Read,
-            split: SplitKind,
-            mut f: impl FnMut(&[u8]) -> std::io::Result<()>,
+            input: &InputSource,
+            mut func: impl FnMut(&[u8]) -> std::io::Result<()>,
         ) -> std::io::Result<()> {
-            let mut br = std::io::BufReader::new(read);
-            match split {
-                SplitKind::Line => br.for_byte_line(|line| {
-                    f(line)?;
+            let mut reader = std::io::BufReader::new(read);
+            match input {
+                InputSource::TextFile(_) => reader.for_byte_line(|line| {
+                    func(line)?;
                     Ok(true)
                 })?,
-                SplitKind::Nul => br.for_byte_record(0, |rec| {
-                    f(rec)?;
-                    Ok(true)
-                })?,
+                InputSource::BinaryFile(_) => {
+                    reader.for_byte_record(0, |record| {
+                        func(record)?;
+                        Ok(true)
+                    })?
+                }
             }
             Ok(())
         }
@@ -1182,9 +1179,8 @@ impl Paths {
             |line: &[u8], path: &Path| -> Result<(), std::io::Error> {
                 #[cfg(not(any(unix, windows)))]
                 {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "{flag} is not supported on this platform",
+                    return Err(std::io::Error::other(
+                        "--in and --in0 are not supported on this platform",
                     ));
                 }
                 if line.is_empty() {
@@ -1220,17 +1216,12 @@ impl Paths {
             );
             let stdin = std::io::stdin();
             let locked = stdin.lock();
-            let path_display = Path::new("stdin");
-            read_records(locked, split, |line| add_line(line, path_display))?;
+            let path = Path::new("stdin");
+            read_records(locked, input, |item| add_line(item, path))?;
             state.stdin_consumed = true;
         } else {
-            let file = std::fs::File::open(path).map_err(|err| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("{}: {}", path.display(), err),
-                )
-            })?;
-            read_records(file, split, |line| add_line(line, path))?;
+            let file = std::fs::File::open(path)?;
+            read_records(file, input, |item| add_line(item, path))?;
         }
         Ok(())
     }
