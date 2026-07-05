@@ -1186,7 +1186,7 @@ rgtest!(input_from_in, |dir: Dir, mut cmd: TestCommand| {
 });
 
 // See: https://github.com/BurntSushi/ripgrep/issues/3459
-rgtest!(input_from_in_non_existing_file, |dir: Dir, mut cmd: TestCommand| {
+rgtest!(input_from_in_non_existing_file, |_dir: Dir, mut cmd: TestCommand| {
     cmd.arg("--in").arg("does_not_exist").arg("match");
     cmd.assert_exit_code(2);
 });
@@ -1214,10 +1214,13 @@ rgtest!(input_from_in0, |dir: Dir, mut cmd: TestCommand| {
 });
 
 // See: https://github.com/BurntSushi/ripgrep/issues/3459
-rgtest!(input_from_in0_non_existing_file, |dir: Dir, mut cmd: TestCommand| {
-    cmd.arg("--in0").arg("does_not_exist").arg("match");
-    cmd.assert_exit_code(2);
-});
+rgtest!(
+    input_from_in0_non_existing_file,
+    |_dir: Dir, mut cmd: TestCommand| {
+        cmd.arg("--in0").arg("does_not_exist").arg("match");
+        cmd.assert_exit_code(2);
+    }
+);
 
 // See: https://github.com/BurntSushi/ripgrep/issues/3459
 rgtest!(

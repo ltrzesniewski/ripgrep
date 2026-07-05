@@ -1202,7 +1202,9 @@ impl Paths {
             {
                 // Unix allows any byte sequence in a file name except
                 // for NUL, so we can just use the raw bytes.
-                output.push(PathBuf::from(item));
+                use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+                let _ = path; // Not used on Unix
+                output.push(PathBuf::from(OsStr::from_bytes(item)));
             }
             #[cfg(windows)]
             {
