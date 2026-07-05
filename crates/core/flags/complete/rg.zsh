@@ -174,6 +174,10 @@ _rg() {
     "--no-ignore-files[don't respect --ignore-file flags]"
     $no'--ignore-files[respect --ignore-file files]'
 
+    + input # Read input paths from file options
+    '*--in=[text file containing paths to search]: :_files'
+    '*--in0=[binary file containing NUL-delimited paths to search]: :_files'
+
     + '(json)' # JSON options
     '--json[output results in JSON Lines format]'
     $no"--no-json[don't output results in JSON Lines format]"
