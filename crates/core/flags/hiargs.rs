@@ -1201,8 +1201,8 @@ impl Paths {
         }
 
         // Prepare the directory to join relative paths with. Use `None`
-        // when the parent path is empty, which avoids checking for relative
-        // paths in `add`, and also handles stdin.
+        // when the parent path is empty, which avoids joining paths
+        // in `add`, and also handles stdin.
         let dir = path.parent();
         let dir = if dir == Some(Path::new("")) { None } else { dir };
 
@@ -1245,15 +1245,10 @@ impl Paths {
             // absolute, so we can end up with output such as `subdir/../file`,
             // but this is consistent with how ripgrep behaves when given
             // relative paths on the command line.
-            output.push(
-                if let Some(dir) = dir
-                    && item.is_relative()
-                {
-                    dir.join(item)
-                } else {
-                    item
-                },
-            );
+            output.push(match dir.filter(|_| item.is_relative()) {
+                Some(dir) => dir.join(item),
+                None => item,
+            });
             Ok(())
         };
 
