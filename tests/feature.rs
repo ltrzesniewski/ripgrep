@@ -1186,6 +1186,23 @@ rgtest!(input_from_in, |dir: Dir, mut cmd: TestCommand| {
 });
 
 // See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(relative_input_from_in, |dir: Dir, mut cmd: TestCommand| {
+    dir.create_dir("sub");
+    dir.create("sub/input", "foo\nbar\r\nbaz\n\n\n../qux");
+    dir.create("sub/foo", "match");
+    dir.create("sub/bar", "match");
+    dir.create("sub/baz", "match");
+    dir.create("qux", "match");
+    dir.create("sub/other", "match");
+    dir.create("other", "match");
+    cmd.arg("--in").arg("sub/input").arg("-l").arg("match");
+    eqnice!(
+        sort_lines("sub/foo\nsub/bar\nsub/baz\nsub/../qux\n"),
+        sort_lines(&cmd.stdout())
+    );
+});
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
 rgtest!(input_from_in_non_existing_file, |_dir: Dir, mut cmd: TestCommand| {
     cmd.arg("--in").arg("does_not_exist").arg("match");
     cmd.assert_exit_code(2);
@@ -1256,6 +1273,23 @@ rgtest!(input_from_in0, |dir: Dir, mut cmd: TestCommand| {
     dir.create("other", "match");
     cmd.arg("--in0").arg("input").arg("-l").arg("match");
     eqnice!(sort_lines("foo\nbar\nbaz\n"), sort_lines(&cmd.stdout()));
+});
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3459
+rgtest!(relative_input_from_in0, |dir: Dir, mut cmd: TestCommand| {
+    dir.create_dir("sub");
+    dir.create("sub/input", "foo\x00bar\x00baz\x00../qux");
+    dir.create("sub/foo", "match");
+    dir.create("sub/bar", "match");
+    dir.create("sub/baz", "match");
+    dir.create("qux", "match");
+    dir.create("sub/other", "match");
+    dir.create("other", "match");
+    cmd.arg("--in0").arg("sub/input").arg("-l").arg("match");
+    eqnice!(
+        sort_lines("sub/foo\nsub/bar\nsub/baz\nsub/../qux\n"),
+        sort_lines(&cmd.stdout())
+    );
 });
 
 // See: https://github.com/BurntSushi/ripgrep/issues/3459

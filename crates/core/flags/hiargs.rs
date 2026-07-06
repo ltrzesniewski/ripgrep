@@ -1200,23 +1200,30 @@ impl Paths {
             Ok(())
         }
 
-        // Adds a single `item` to `output`. The `path` parameter is
-        // only used for error reporting.
-        let mut add = |item: &[u8], path: &Path| -> std::io::Result<()> {
+        // Prepare the directory to join relative paths with. Use `None`
+        // when the parent path is empty, which avoids checking for relative
+        // paths in `add`, and also handles stdin.
+        let dir = path.parent();
+        let dir = if dir == Some(Path::new("")) { None } else { dir };
+
+        // Adds a single `item` to `output`. If `item` is a relative path,
+        // it is joined with `dir` to make it relative to the input file.
+        // The `display_path` parameter is only used for error reporting.
+        let mut add = |item: &[u8], display_path: &Path| {
             // Allow empty lines/records in input files.
             if item.is_empty() {
                 return Ok(());
             }
             #[cfg(unix)]
-            {
+            let item = {
                 // Unix allows any byte sequence in a file name except
                 // for NUL, so we can just use the raw bytes.
                 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
-                let _ = path; // Not used on Unix
-                output.push(PathBuf::from(OsStr::from_bytes(item)));
-            }
+                let _ = display_path; // Not used on Unix
+                PathBuf::from(OsStr::from_bytes(item))
+            };
             #[cfg(windows)]
-            {
+            let item = {
                 // On Windows, file names are stored in Unicode on newer
                 // file systems, so we interpret input data as UTF-8.
                 // Not only is it now the standard encoding for text,
@@ -1227,12 +1234,26 @@ impl Paths {
                     std::io::Error::other(format!(
                         "error reading {} {}: {}",
                         flag,
-                        path.display(),
+                        display_path.display(),
                         err
                     ))
                 })?;
-                output.push(PathBuf::from(s));
-            }
+                PathBuf::from(s)
+            };
+
+            // Note: We don't canonicalize relative paths or make them
+            // absolute, so we can end up with output such as `subdir/../file`,
+            // but this is consistent with how ripgrep behaves when given
+            // relative paths on the command line.
+            output.push(
+                if let Some(dir) = dir
+                    && item.is_relative()
+                {
+                    dir.join(item)
+                } else {
+                    item
+                },
+            );
             Ok(())
         };
 
