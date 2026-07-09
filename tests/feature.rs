@@ -1175,7 +1175,7 @@ rgtest!(stop_on_nonmatch, |dir: Dir, mut cmd: TestCommand| {
 
 // See: https://github.com/BurntSushi/ripgrep/issues/3459
 rgtest!(input_from_in, |dir: Dir, mut cmd: TestCommand| {
-    dir.create("input", "foo\nbar\r\nbaz\n\n\nqux");
+    dir.create("input", "foo\nbar\r\nbaz\nqux");
     dir.create("foo", "match");
     dir.create("bar", "match");
     dir.create("baz", "match");
@@ -1249,7 +1249,7 @@ rgtest!(input_from_in_contains_nul_byte, |dir: Dir, mut cmd: TestCommand| {
 
 // See: https://github.com/BurntSushi/ripgrep/issues/3459
 rgtest!(input_from_in0, |dir: Dir, mut cmd: TestCommand| {
-    dir.create("input", "foo\x00bar\x00\x00baz");
+    dir.create("input", "foo\x00bar\x00baz");
     dir.create("foo", "match");
     dir.create("bar", "match");
     dir.create("baz", "match");

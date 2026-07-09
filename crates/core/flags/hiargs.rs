@@ -1200,10 +1200,6 @@ impl Paths {
         // Adds a single `item` to `output`. The `path` parameter is
         // only used for error reporting.
         let mut add = |item: &[u8], path: &Path| -> std::io::Result<()> {
-            // Allow empty lines/records in input files.
-            if item.is_empty() {
-                return Ok(());
-            }
             #[cfg(unix)]
             {
                 // Unix allows any byte sequence in a file name except
