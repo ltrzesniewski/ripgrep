@@ -3351,14 +3351,13 @@ impl Flag for In {
         r"
 Includes paths to search from the given file, with one path per line.
 .sp
-When this flag is used multiple times or in combination with the \flag{in0}
-flag, then all provided files are searched in addition to the paths in the
-positional arguments.
+When this flag is used, it behaves as if the file paths in the file provided
+were passed as positional arguments in the same order as they are
+in the file and relative to other positional arguments.
 .sp
-Empty lines are ignored, and newlines (both LF and CRLF) are not counted as
-part of the path. The rest of the path name is decoded as UTF-8 on Windows
-and taken as-is on Unix systems.
-Use the \flag{in0} flag to use \fBNUL\fP as separator.
+Newlines (both LF and CRLF) are not counted as part of the path.
+The rest of the path name is decoded as UTF-8 on Windows and taken as-is
+on Unix systems. Use the \flag{in0} flag to use \fBNUL\fP as terminator.
 .sp
 When \fIINPUTFILE\fP is \fB-\fP, then \fBstdin\fP will be read for the files.
 "
@@ -3396,14 +3395,13 @@ impl Flag for In0 {
     }
     fn doc_long(&self) -> &'static str {
         r"
-Includes paths to search from the given file, separated by \fBNUL\fP bytes.
+Includes paths to search from the given file, terminated by \fBNUL\fP bytes.
 .sp
-When this flag is used multiple times or in combination with the \flag{in}
-flag, then all provided files are searched in addition to the paths in the
-positional arguments.
+When this flag is used, it behaves as if the file paths in the file provided
+were passed as positional arguments in the same order as they are
+in the file and relative to other positional arguments.
 .sp
-Empty entries are ignored. The path names are decoded as UTF-8 on Windows
-and taken as-is on Unix systems.
+The path names are decoded as UTF-8 on Windows and taken as-is on Unix systems.
 .sp
 When \fIINPUTFILE\fP is \fB-\fP, then \fBstdin\fP will be read for the files.
 "
