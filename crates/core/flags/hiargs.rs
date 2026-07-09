@@ -1161,8 +1161,8 @@ impl Paths {
         // - Unix or Windows: different rules for `PathBuf`
 
         let (path, flag) = match input {
-            InputSource::TextFile(path) => (path, "--in"),
-            InputSource::BinaryFile(path) => (path, "--in0"),
+            InputSource::LineTerminated(path) => (path, "--in"),
+            InputSource::NulTerminated(path) => (path, "--in0"),
         };
 
         // Reads paths from `read` using delimiters specified by `input`
@@ -1174,7 +1174,7 @@ impl Paths {
         ) -> anyhow::Result<()> {
             let mut reader = std::io::BufReader::new(read);
             match input {
-                InputSource::TextFile(path) => {
+                InputSource::LineTerminated(path) => {
                     reader.for_byte_line(|line| {
                         if line.contains(&0u8) {
                             return Err(std::io::Error::other(format!(
@@ -1187,7 +1187,7 @@ impl Paths {
                         Ok(true)
                     })?
                 }
-                InputSource::BinaryFile(_) => {
+                InputSource::NulTerminated(_) => {
                     reader.for_byte_record(0, |record| {
                         for_each_path(record)?;
                         Ok(true)

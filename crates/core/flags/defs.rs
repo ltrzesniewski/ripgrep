@@ -3368,7 +3368,7 @@ When \fIINPUTFILE\fP is \fB-\fP, then \fBstdin\fP will be read for the files.
 
     fn update(&self, v: FlagValue, args: &mut LowArgs) -> anyhow::Result<()> {
         let path = PathBuf::from(v.unwrap_value());
-        args.inputs.push(InputSource::TextFile(path));
+        args.inputs.push(InputSource::LineTerminated(path));
         Ok(())
     }
 }
@@ -3412,7 +3412,7 @@ When \fIINPUTFILE\fP is \fB-\fP, then \fBstdin\fP will be read for the files.
 
     fn update(&self, v: FlagValue, args: &mut LowArgs) -> anyhow::Result<()> {
         let path = PathBuf::from(v.unwrap_value());
-        args.inputs.push(InputSource::BinaryFile(path));
+        args.inputs.push(InputSource::NulTerminated(path));
         Ok(())
     }
 }
@@ -3424,44 +3424,50 @@ fn test_in_in0() {
     assert_eq!(Vec::<InputSource>::new(), args.inputs);
 
     let args = parse_low_raw(["--in", "foo"]).unwrap();
-    assert_eq!(vec![InputSource::TextFile(PathBuf::from("foo"))], args.inputs);
+    assert_eq!(
+        vec![InputSource::LineTerminated(PathBuf::from("foo"))],
+        args.inputs
+    );
 
     let args = parse_low_raw(["--in0", "foo"]).unwrap();
     assert_eq!(
-        vec![InputSource::BinaryFile(PathBuf::from("foo"))],
+        vec![InputSource::NulTerminated(PathBuf::from("foo"))],
         args.inputs
     );
 
     let args = parse_low_raw(["--in=foo"]).unwrap();
-    assert_eq!(vec![InputSource::TextFile(PathBuf::from("foo"))], args.inputs);
+    assert_eq!(
+        vec![InputSource::LineTerminated(PathBuf::from("foo"))],
+        args.inputs
+    );
 
     let args = parse_low_raw(["--in0=foo"]).unwrap();
     assert_eq!(
-        vec![InputSource::BinaryFile(PathBuf::from("foo"))],
+        vec![InputSource::NulTerminated(PathBuf::from("foo"))],
         args.inputs
     );
 
     let args = parse_low_raw(["--in", "-foo"]).unwrap();
     assert_eq!(
-        vec![InputSource::TextFile(PathBuf::from("-foo"))],
+        vec![InputSource::LineTerminated(PathBuf::from("-foo"))],
         args.inputs
     );
 
     let args = parse_low_raw(["--in0", "-foo"]).unwrap();
     assert_eq!(
-        vec![InputSource::BinaryFile(PathBuf::from("-foo"))],
+        vec![InputSource::NulTerminated(PathBuf::from("-foo"))],
         args.inputs
     );
 
     let args = parse_low_raw(["--in=-foo"]).unwrap();
     assert_eq!(
-        vec![InputSource::TextFile(PathBuf::from("-foo"))],
+        vec![InputSource::LineTerminated(PathBuf::from("-foo"))],
         args.inputs
     );
 
     let args = parse_low_raw(["--in0=-foo"]).unwrap();
     assert_eq!(
-        vec![InputSource::BinaryFile(PathBuf::from("-foo"))],
+        vec![InputSource::NulTerminated(PathBuf::from("-foo"))],
         args.inputs
     );
 
@@ -3469,28 +3475,34 @@ fn test_in_in0() {
         parse_low_raw(["--in=foo", "--in0", "bar", "--in", "baz"]).unwrap();
     assert_eq!(
         vec![
-            InputSource::TextFile(PathBuf::from("foo")),
-            InputSource::BinaryFile(PathBuf::from("bar")),
-            InputSource::TextFile(PathBuf::from("baz")),
+            InputSource::LineTerminated(PathBuf::from("foo")),
+            InputSource::NulTerminated(PathBuf::from("bar")),
+            InputSource::LineTerminated(PathBuf::from("baz")),
         ],
         args.inputs
     );
 
     let args = parse_low_raw(["--in=-"]).unwrap();
-    assert_eq!(vec![InputSource::TextFile(PathBuf::from("-")),], args.inputs);
+    assert_eq!(
+        vec![InputSource::LineTerminated(PathBuf::from("-")),],
+        args.inputs
+    );
 
     let args = parse_low_raw(["--in", "-"]).unwrap();
-    assert_eq!(vec![InputSource::TextFile(PathBuf::from("-")),], args.inputs);
+    assert_eq!(
+        vec![InputSource::LineTerminated(PathBuf::from("-")),],
+        args.inputs
+    );
 
     let args = parse_low_raw(["--in0=-"]).unwrap();
     assert_eq!(
-        vec![InputSource::BinaryFile(PathBuf::from("-")),],
+        vec![InputSource::NulTerminated(PathBuf::from("-")),],
         args.inputs
     );
 
     let args = parse_low_raw(["--in0", "-"]).unwrap();
     assert_eq!(
-        vec![InputSource::BinaryFile(PathBuf::from("-")),],
+        vec![InputSource::NulTerminated(PathBuf::from("-")),],
         args.inputs
     );
 }

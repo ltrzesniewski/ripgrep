@@ -641,10 +641,10 @@ pub(crate) enum MmapMode {
 /// Represents a source of input paths to be searched.
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum InputSource {
-    /// A text file with newline-separated paths. Comes from the `--in` flag.
-    TextFile(PathBuf),
-    /// A text file with NUL-separated paths. Comes from the `--in0` flag.
-    BinaryFile(PathBuf),
+    /// A text file with newline-terminated paths. Comes from the `--in` flag.
+    LineTerminated(PathBuf),
+    /// A binary file with NUL-terminated paths. Comes from the `--in0` flag.
+    NulTerminated(PathBuf),
 }
 
 /// Represents a source of patterns that ripgrep should search for.
