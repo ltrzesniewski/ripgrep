@@ -450,7 +450,7 @@ impl SearcherBuilder {
     ///
     /// If a heap limit is set to `0`, then no heap space is used. If there are
     /// no alternative strategies available for searching without heap space
-    /// (e.g., memory maps are disabled), then the searcher wil return an error
+    /// (e.g., memory maps are disabled), then the searcher will return an error
     /// immediately.
     ///
     /// By default, no limit is set.
@@ -576,7 +576,7 @@ impl SearcherBuilder {
     /// limit, regardless of how many lines it spans.
     ///
     /// Note that `0` is a legal value. This will cause the searcher to
-    /// immediately quick without searching anything.
+    /// immediately quit without searching anything.
     ///
     /// By default, no limit is set.
     #[inline]
@@ -695,7 +695,7 @@ impl Searcher {
         // which isn't possible when searching an arbitrary std::io::Read.
         if self.multi_line_with_matcher(&matcher) {
             log::trace!(
-                "{:?}: reading entire file on to heap for mulitline",
+                "{:?}: reading entire file on to heap for multiline",
                 path
             );
             self.fill_multi_line_buffer_from_file::<S>(file)?;
@@ -880,7 +880,7 @@ impl Searcher {
     /// limit, regardless of how many lines it spans.
     ///
     /// Note that `0` is a legal value. This will cause the searcher to
-    /// immediately quick without searching anything.
+    /// immediately quit without searching anything.
     #[inline]
     pub fn max_matches(&self) -> Option<u64> {
         self.config.max_matches

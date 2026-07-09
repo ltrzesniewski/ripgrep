@@ -2,14 +2,33 @@ TBD
 ===
 Unreleased changes. Release notes have not yet been written.
 
+Platform support:
+
+* `aarch64-unknown-linux-musl` is now included in the release binaries for
+  ripgrep.
+
+Performance improvements:
+
+* [PERF #3293](https://github.com/BurntSushi/ripgrep/issues/3293):
+  Improves directory traversal time on very large corpora.
+
+Feature enhancements:
+
+* [FEATURE #3275](https://github.com/BurntSushi/ripgrep/issues/3275):
+  ripgrep now respects `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_SYSTEM`.
+
 Bug fixes:
 
 * [BUG #3212](https://github.com/BurntSushi/ripgrep/pull/3212):
   Don't check for the existence of `.jj` when `--no-ignore` is used.
+* [BUG #3320](https://github.com/BurntSushi/ripgrep/pull/3419),
+  [BUG #3376](https://github.com/BurntSushi/ripgrep/pull/3376),
+  [BUG #3419](https://github.com/BurntSushi/ripgrep/pull/3419):
+  Fix gitignore matching bug when searching across multiple directories.
 
 
-15.1.0
-======
+15.1.0 (2025-10-22)
+===================
 This is a small release that fixes a bug with how ripgrep handles line
 buffering. This might manifest as ripgrep printing output later than you
 expect or not working correctly with `tail -f` (even if you're using the

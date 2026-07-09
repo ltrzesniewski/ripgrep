@@ -16,7 +16,7 @@
 use std::{
     collections::HashMap,
     ffi::{OsStr, OsString},
-    fs::{File, FileType},
+    fs::{self, File, FileType},
     io::{self, BufRead},
     path::{Path, PathBuf},
     sync::{Arc, RwLock, Weak},
@@ -96,8 +96,18 @@ pub(crate) struct Ignore {
     // Parent matchers are cached independently of the path being walked, but
     // matching them still needs the canonicalized path originally passed to
     // `add_parents`. For example, when walking `/tmp/project/src`, parent
-    // matchers use `/tmp/project/src` to rewrite `foo.py` before matching it
-    // against ignore files from `/tmp/project` and its ancestors.
+    // matchers use `/tmp/project/src` to rewrite `/tmp/project/src/foo.py`
+    // before matching it against ignore files from `/tmp/project` and its
+    // ancestors.
+    //
+    // For ripgrep itself, this means that `rg pat src tests` must rewrite
+    // `src/foo` relative to `.../src`, and not whatever root was prepared
+    // first.
+    //
+    // See: https://github.com/BurntSushi/ripgrep/pull/3420
+    // See: https://github.com/BurntSushi/ripgrep/issues/3376
+    // See: https://github.com/BurntSushi/ripgrep/issues/3419
+    // See: https://github.com/BurntSushi/ripgrep/issues/3320
     absolute_base: Option<Arc<PathBuf>>,
 }
 
@@ -269,33 +279,118 @@ impl Ignore {
         )
     }
 
+    /// Like add_child, but uses successful read_dir entries to reduce
+    /// probing when discovering ignore files.
+    pub(crate) fn add_child_with_entries<P: AsRef<Path>>(
+        &self,
+        dir: P,
+        entries: &[fs::DirEntry],
+    ) -> (Ignore, Option<Error>) {
+        let files = self.collect_ignore_files(entries);
+        let (ig, err) = self.add_child_path_with_found_ignore_files(
+            dir.as_ref(),
+            Some(&files),
+        );
+        (
+            Ignore {
+                inner: Arc::new(ig),
+                absolute_base: self.absolute_base.clone(),
+            },
+            err,
+        )
+    }
+
     /// Like add_child, but takes a full path and returns an IgnoreInner.
     fn add_child_path(&self, dir: &Path) -> (IgnoreInner, Option<Error>) {
+        self.add_child_path_with_found_ignore_files(dir, None)
+    }
+
+    fn collect_ignore_files(
+        &self,
+        entries: &[fs::DirEntry],
+    ) -> IgnoreFilesFound {
+        let custom_ignore_filenames = &self.inner.custom_ignore_filenames;
+        let mut files = IgnoreFilesFound {
+            has_ignore: false,
+            has_git_ignore: false,
+            has_git_dir: false,
+            has_jj_dir: false,
+            custom_ignore_files: vec![false; custom_ignore_filenames.len()],
+        };
+        for entry in entries {
+            let file_name = entry.file_name();
+            if file_name == OsStr::new(".ignore") {
+                files.has_ignore = true;
+            } else if file_name == OsStr::new(".gitignore") {
+                files.has_git_ignore = true;
+            } else if file_name == OsStr::new(".git") {
+                files.has_git_dir = true;
+            } else if file_name == OsStr::new(".jj") {
+                files.has_jj_dir = true;
+            }
+            for (i, name) in custom_ignore_filenames.iter().enumerate() {
+                if file_name == name.as_os_str() {
+                    files.custom_ignore_files[i] = true;
+                }
+            }
+        }
+        files
+    }
+
+    fn add_child_path_with_found_ignore_files(
+        &self,
+        dir: &Path,
+        ignore_files_list: Option<&IgnoreFilesFound>,
+    ) -> (IgnoreInner, Option<Error>) {
         let check_vcs_dir = self.inner.opts.require_git
             && (self.inner.opts.git_ignore || self.inner.opts.git_exclude);
-        let git_type = if check_vcs_dir {
+        let git_type = if check_vcs_dir
+            && ignore_files_list.is_none_or(|i| i.has_git_dir)
+        {
             dir.join(".git").metadata().ok().map(|md| md.file_type())
         } else {
             None
         };
-        let has_git =
-            check_vcs_dir && (git_type.is_some() || dir.join(".jj").exists());
+        let has_jj = check_vcs_dir
+            && ignore_files_list.is_none_or(|i| i.has_jj_dir)
+            && dir.join(".jj").exists();
+        let has_git = check_vcs_dir && (git_type.is_some() || has_jj);
 
         let mut errs = PartialErrorBuilder::default();
-        let custom_ig_matcher =
-            if self.inner.custom_ignore_filenames.is_empty() {
+        let custom_ig_matcher = if self
+            .inner
+            .custom_ignore_filenames
+            .is_empty()
+        {
+            Gitignore::empty()
+        } else {
+            let custom_ignore_names: Vec<&OsString> = match ignore_files_list {
+                None => self.inner.custom_ignore_filenames.iter().collect(),
+                Some(m) => self
+                    .inner
+                    .custom_ignore_filenames
+                    .iter()
+                    .zip(m.custom_ignore_files.iter())
+                    .filter(|&(_, &matched)| matched)
+                    .map(|(name, _)| name)
+                    .collect(),
+            };
+            if custom_ignore_names.is_empty() {
                 Gitignore::empty()
             } else {
                 let (m, err) = create_gitignore(
                     &dir,
                     &dir,
-                    &self.inner.custom_ignore_filenames,
+                    &custom_ignore_names,
                     self.inner.opts.ignore_case_insensitive,
                 );
                 errs.maybe_push(err);
                 m
-            };
-        let ig_matcher = if !self.inner.opts.ignore {
+            }
+        };
+        let ig_matcher = if !self.inner.opts.ignore
+            || !ignore_files_list.is_none_or(|i| i.has_ignore)
+        {
             Gitignore::empty()
         } else {
             let (m, err) = create_gitignore(
@@ -307,7 +402,9 @@ impl Ignore {
             errs.maybe_push(err);
             m
         };
-        let gi_matcher = if !self.inner.opts.git_ignore {
+        let gi_matcher = if !self.inner.opts.git_ignore
+            || !ignore_files_list.is_none_or(|i| i.has_git_ignore)
+        {
             Gitignore::empty()
         } else {
             let (m, err) = create_gitignore(
@@ -320,7 +417,9 @@ impl Ignore {
             m
         };
 
-        let gi_exclude_matcher = if !self.inner.opts.git_exclude {
+        let gi_exclude_matcher = if !self.inner.opts.git_exclude
+            || !ignore_files_list.is_none_or(|i| i.has_git_dir)
+        {
             Gitignore::empty()
         } else {
             match resolve_git_commondir(dir, git_type) {
@@ -595,6 +694,22 @@ impl Ignore {
     fn absolute_base(&self) -> Option<&Path> {
         self.absolute_base.as_ref().map(|p| &***p)
     }
+}
+
+/// State for tracking what kinds of files ripgrep is interested in for a
+/// given directory.
+///
+/// This is computed over the entire set of files in a directory instead of
+/// trying to stat each file individually. If a file is present, it's only then
+/// that we stat it for more information, instead of relying on the stat to
+/// determine its existence.
+#[derive(Debug)]
+struct IgnoreFilesFound {
+    has_ignore: bool,
+    has_git_ignore: bool,
+    has_git_dir: bool,
+    has_jj_dir: bool,
+    custom_ignore_files: Vec<bool>,
 }
 
 #[derive(Clone, Copy)]
@@ -1328,6 +1443,122 @@ mod tests {
         assert!(Arc::ptr_eq(&src_parents.inner, &tests_parents.inner));
         assert!(src.matched("build", true).is_none());
         assert!(tests.matched("build", true).is_ignore());
+    }
+
+    /// Parent matchers are shared across search roots, but path rewriting for
+    /// absolute parents must use each root's own base path. Otherwise a rule
+    /// like `src/invalid` is matched against the wrong absolute path when
+    /// `src` is searched before a sibling root (e.g. `tests`).
+    ///
+    /// Paths passed to `matched` use the same relative layout as `Walk` when
+    /// roots are given as relative directory names.
+    ///
+    /// Regression for: https://github.com/BurntSushi/ripgrep/issues/3376
+    /// and https://github.com/BurntSushi/ripgrep/issues/3419
+    #[test]
+    fn multi_root_gitignore_order_independent() {
+        let td = tmpdir();
+        let cwd = std::env::current_dir().unwrap();
+        // Use paths relative to CWD like the CLI walk does for `rg pat src tests`.
+        let root = td.path().strip_prefix(&cwd).unwrap_or(td.path());
+        let src_root = root.join("src");
+        let tests_root = root.join("tests");
+
+        mkdirp(td.path().join(".git"));
+        mkdirp(td.path().join("src"));
+        mkdirp(td.path().join("tests"));
+        wfile(td.path().join(".gitignore"), "src/invalid\n");
+        wfile(td.path().join("src/invalid"), "x");
+        wfile(td.path().join("src/valid"), "x");
+        wfile(td.path().join("tests/valid"), "x");
+
+        let ig0 = IgnoreBuilder::new().build();
+
+        // Historically buggy order: search `src` first, then `tests`.
+        let (src_parents, err) = ig0.add_parents(&src_root);
+        assert!(err.is_none());
+        let (src, err) = src_parents.add_child(&src_root);
+        assert!(err.is_none());
+        let (tests_parents, err) = ig0.add_parents(&tests_root);
+        assert!(err.is_none());
+        let (tests, err) = tests_parents.add_child(&tests_root);
+        assert!(err.is_none());
+
+        assert!(Arc::ptr_eq(&src_parents.inner, &tests_parents.inner));
+        // Each root must carry its own absolute_base even though inners are shared.
+        assert_ne!(
+            src.absolute_base.as_ref().unwrap().as_path(),
+            tests.absolute_base.as_ref().unwrap().as_path()
+        );
+        assert!(
+            src.matched(src_root.join("invalid"), false).is_ignore(),
+            "parent .gitignore must apply for the src root even when \
+             another root was prepared in the same process"
+        );
+        assert!(src.matched(src_root.join("valid"), false).is_none());
+        assert!(tests.matched(tests_root.join("valid"), false).is_none());
+
+        // Reverse order should behave the same way.
+        let ig0 = IgnoreBuilder::new().build();
+        let (tests_parents, err) = ig0.add_parents(&tests_root);
+        assert!(err.is_none());
+        let (tests, err) = tests_parents.add_child(&tests_root);
+        assert!(err.is_none());
+        let (src_parents, err) = ig0.add_parents(&src_root);
+        assert!(err.is_none());
+        let (src, err) = src_parents.add_child(&src_root);
+        assert!(err.is_none());
+
+        assert!(src.matched(src_root.join("invalid"), false).is_ignore());
+        assert!(src.matched(src_root.join("valid"), false).is_none());
+        assert!(tests.matched(tests_root.join("valid"), false).is_none());
+    }
+
+    /// Same multi-root / order issue for non-git ignore files (e.g. `.rgignore`
+    /// via custom ignore names).
+    ///
+    /// Regression for: https://github.com/BurntSushi/ripgrep/issues/3320
+    #[test]
+    fn multi_root_custom_ignore_order_independent() {
+        let td = tmpdir();
+        let cwd = std::env::current_dir().unwrap();
+        let root = td.path().strip_prefix(&cwd).unwrap_or(td.path());
+        let alpha_root = root.join("alpha");
+        let beta_root = root.join("beta");
+
+        mkdirp(td.path().join("alpha"));
+        mkdirp(td.path().join("beta"));
+        wfile(td.path().join(".rgignore"), "beta/**/*.svg\n");
+        wfile(td.path().join("alpha/a.txt"), "x");
+        wfile(td.path().join("beta/x.svg"), "x");
+
+        let ig0 = IgnoreBuilder::new()
+            .add_custom_ignore_filename(".rgignore")
+            .ignore(false)
+            .git_ignore(false)
+            .git_global(false)
+            .git_exclude(false)
+            .build();
+
+        let (alpha_parents, err) = ig0.add_parents(&alpha_root);
+        assert!(err.is_none());
+        let (alpha, err) = alpha_parents.add_child(&alpha_root);
+        assert!(err.is_none());
+        let (beta_parents, err) = ig0.add_parents(&beta_root);
+        assert!(err.is_none());
+        let (beta, err) = beta_parents.add_child(&beta_root);
+        assert!(err.is_none());
+
+        assert_ne!(
+            alpha.absolute_base.as_ref().unwrap().as_path(),
+            beta.absolute_base.as_ref().unwrap().as_path()
+        );
+        assert!(alpha.matched(alpha_root.join("a.txt"), false).is_none());
+        assert!(
+            beta.matched(beta_root.join("x.svg"), false).is_ignore(),
+            "parent .rgignore must apply for the beta root regardless of \
+             which root was set up first"
+        );
     }
 
     #[test]
