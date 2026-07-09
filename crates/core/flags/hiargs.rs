@@ -1089,8 +1089,8 @@ impl Paths {
             let path = PathBuf::from(osarg);
             if state.stdin_consumed && path == Path::new("-") {
                 anyhow::bail!(
-                    "error: attempted to read patterns or inputs from stdin \
-                     while also searching stdin",
+                    "error: attempted to read patterns or input file paths \
+                     from stdin while also searching stdin",
                 );
             }
             paths.push(path);
@@ -1165,9 +1165,6 @@ impl Paths {
             InputSource::BinaryFile(path) => (path, "--in0"),
         };
 
-        #[cfg(not(any(unix, windows)))]
-        anyhow::bail!("{flag} is not supported on this platform");
-
         // Reads paths from `read` using delimiters specified by `input`
         // and calls `for_each_path` on each one of them.
         fn read(
@@ -1181,7 +1178,7 @@ impl Paths {
                     reader.for_byte_line(|line| {
                         if line.contains(&0u8) {
                             return Err(std::io::Error::other(format!(
-                                "--in {}: file contains a NUL byte, \
+                                "{}: --in file contains a NUL byte, \
                                  did you intend to use --in0 instead?",
                                 path.display()
                             )));
@@ -1215,7 +1212,7 @@ impl Paths {
                 let _ = path; // Not used on Unix
                 output.push(PathBuf::from(OsStr::from_bytes(item)));
             }
-            #[cfg(windows)]
+            #[cfg(not(unix))]
             {
                 // On Windows, file names are stored in Unicode on newer
                 // file systems, so we interpret input data as UTF-8.
@@ -1223,6 +1220,9 @@ impl Paths {
                 // but it is also used by ripgrep for its output.
                 // This enables easy chaining of ripgrep calls.
                 // https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
+                //
+                // We do the same for other non-Unix sytstems, since
+                // this is a reasonable default approach.
                 let s = std::str::from_utf8(item).map_err(|err| {
                     std::io::Error::other(format!(
                         "error reading {} {}: {}",
