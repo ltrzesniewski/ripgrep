@@ -176,8 +176,8 @@ _rg() {
     $no'--ignore-files[respect --ignore-file files]'
 
     + input
-    '*--in=[text file containing paths to search]: :_files'
-    '*--in0=[binary file containing NUL-delimited paths to search]: :_files'
+    '*--in=[specify text file containing paths to search]: :_files'
+    '*--in0=[specify binary file containing NUL-terminated paths to search]: :_files'
 
     + '(invert-match)'
     {-v,--invert-match}'[invert matching]'
