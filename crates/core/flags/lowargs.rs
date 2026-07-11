@@ -648,6 +648,34 @@ pub(crate) enum InputSource {
     NulTerminated(PathBuf),
 }
 
+impl std::fmt::Display for InputSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InputSource::PositionalArgument(osarg) => {
+                if osarg == OsStr::new("-") {
+                    write!(f, "stdin")
+                } else {
+                    write!(f, "{}", osarg.to_string_lossy())
+                }
+            }
+            InputSource::LineTerminated(path) => {
+                if path == std::path::Path::new("-") {
+                    write!(f, "stdin")
+                } else {
+                    write!(f, "{}", path.display())
+                }
+            }
+            InputSource::NulTerminated(path) => {
+                if path == std::path::Path::new("-") {
+                    write!(f, "stdin")
+                } else {
+                    write!(f, "{}", path.display())
+                }
+            }
+        }
+    }
+}
+
 /// Represents a source of patterns that ripgrep should search for.
 ///
 /// The reason to unify these is so that we can retain the order of `-f/--flag`

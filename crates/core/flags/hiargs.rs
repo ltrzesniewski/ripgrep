@@ -1184,26 +1184,38 @@ impl Paths {
         fn read(
             read: impl std::io::Read,
             input: &InputSource,
-            mut for_each_path: impl FnMut(&[u8]) -> std::io::Result<()>,
+            output: &mut Vec<PathBuf>,
         ) -> anyhow::Result<()> {
             let mut reader = std::io::BufReader::new(read);
             match input {
-                InputSource::LineTerminated(path) => {
+                InputSource::LineTerminated(_) => {
                     reader.for_byte_line(|line| {
                         if line.contains(&0u8) {
                             return Err(std::io::Error::other(format!(
-                                "{}: --in file contains a NUL byte, \
-                                 did you intend to use --in0 instead?",
-                                path.display()
+                                "{}: file contains a NUL byte, \
+                                 did you intend to use --in0 instead of --in?",
+                                input
                             )));
                         }
-                        for_each_path(line)?;
+                        let s = ByteSlice::to_path(line).map_err(|err| {
+                            std::io::Error::other(format!(
+                                "{}: {}",
+                                input, err
+                            ))
+                        })?;
+                        output.push(s.into());
                         Ok(true)
                     })?
                 }
                 InputSource::NulTerminated(_) => {
                     reader.for_byte_record(0, |record| {
-                        for_each_path(record)?;
+                        let s = ByteSlice::to_path(record).map_err(|err| {
+                            std::io::Error::other(format!(
+                                "{}: {}",
+                                input, err
+                            ))
+                        })?;
+                        output.push(s.into());
                         Ok(true)
                     })?
                 }
@@ -1214,21 +1226,6 @@ impl Paths {
             Ok(())
         }
 
-        // Adds a single `item` to `output`. The `path` parameter is
-        // only used for error reporting.
-        let mut add = |item: &[u8], path: &Path| -> std::io::Result<()> {
-            let s = ByteSlice::to_path(item).map_err(|err| {
-                std::io::Error::other(format!(
-                    "error reading {} {}: {}",
-                    flag,
-                    path.display(),
-                    err
-                ))
-            })?;
-            output.push(PathBuf::from(s));
-            Ok(())
-        };
-
         if path == Path::new("-") {
             anyhow::ensure!(
                 !state.stdin_consumed,
@@ -1237,19 +1234,13 @@ impl Paths {
             );
             let stdin = std::io::stdin();
             let locked = stdin.lock();
-            let path = Path::new("stdin");
-            read(locked, input, |item| add(item, path))?;
+            read(locked, input, output)?;
             state.stdin_consumed = true;
         } else {
             let file = std::fs::File::open(path).map_err(|err| {
-                std::io::Error::other(format!(
-                    "{} {}: {}",
-                    flag,
-                    path.display(),
-                    err
-                ))
+                std::io::Error::other(format!("{}: {}", input, err))
             })?;
-            read(file, input, |item| add(item, path))?;
+            read(file, input, output)?;
         }
         Ok(())
     }
