@@ -8,7 +8,7 @@ use std::{
 };
 
 use {
-    bstr::{BString, io::BufReadExt},
+    bstr::{BString, ByteSlice, io::BufReadExt},
     grep::printer::{ColorSpecs, SummaryKind},
 };
 
@@ -1170,7 +1170,6 @@ impl Paths {
         // We need to handle a combination of the following:
         // - Text or binary files: LF/CRLF or NUL separators
         // - Files or stdin: needs to handle `stdin_consumed`
-        // - Unix or Windows: different rules for `PathBuf`
 
         let (path, flag) = match input {
             InputSource::LineTerminated(path) => (path, "--in"),
@@ -1214,35 +1213,15 @@ impl Paths {
         // Adds a single `item` to `output`. The `path` parameter is
         // only used for error reporting.
         let mut add = |item: &[u8], path: &Path| -> std::io::Result<()> {
-            #[cfg(unix)]
-            {
-                // Unix allows any byte sequence in a file name except
-                // for NUL, so we can just use the raw bytes.
-                use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
-                let _ = path; // Not used on Unix
-                output.push(PathBuf::from(OsStr::from_bytes(item)));
-            }
-            #[cfg(not(unix))]
-            {
-                // On Windows, file names are stored in Unicode on newer
-                // file systems, so we interpret input data as UTF-8.
-                // Not only is it now the standard encoding for text,
-                // but it is also used by ripgrep for its output.
-                // This enables easy chaining of ripgrep calls.
-                // https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
-                //
-                // We do the same for other non-Unix sytstems, since
-                // this is a reasonable default approach.
-                let s = std::str::from_utf8(item).map_err(|err| {
-                    std::io::Error::other(format!(
-                        "error reading {} {}: {}",
-                        flag,
-                        path.display(),
-                        err
-                    ))
-                })?;
-                output.push(PathBuf::from(s));
-            }
+            let s = ByteSlice::to_path(item).map_err(|err| {
+                std::io::Error::other(format!(
+                    "error reading {} {}: {}",
+                    flag,
+                    path.display(),
+                    err
+                ))
+            })?;
+            output.push(PathBuf::from(s));
             Ok(())
         };
 
