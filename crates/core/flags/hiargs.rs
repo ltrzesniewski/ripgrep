@@ -1091,7 +1091,7 @@ impl Paths {
 
         let mut paths = Vec::with_capacity(low.inputs.len());
         for input in low.inputs.drain(..) {
-            Self::add_paths_from_input(state, &input, &mut paths)?
+            Self::push_paths_from_input(state, &input, &mut paths)?
         }
         log::debug!("number of paths given to search: {}", paths.len());
         if !paths.is_empty() {
@@ -1148,21 +1148,25 @@ impl Paths {
     /// an `--in` or `--in0` flag, whose goal is to reuse existing input file
     /// sets and to enable usage of chained ripgrep calls, such as
     /// `rg foo -l0 | rg bar --in0=- -l0 | rg baz --in0=-`
-    fn add_paths_from_input(
+    fn push_paths_from_input(
         state: &mut State,
         input: &InputSource,
         output: &mut Vec<PathBuf>,
     ) -> anyhow::Result<()> {
         // Handle positional arguments separately, as these have
         // a different logic than the one from the flags.
-        if let InputSource::PositionalArgument(osarg) = input {
+        if let InputSource::PositionalArgument(_) = input {
             if state.stdin_consumed && input.is_stdin() {
                 anyhow::bail!(
                     "error: attempted to read patterns \
                      from stdin while also searching stdin",
                 );
             }
-            output.push(PathBuf::from(osarg));
+            Self::push_paths_from_input_or_related_reader(
+                std::io::empty(),
+                input,
+                output,
+            )?;
             return Ok(());
         }
 
@@ -1178,53 +1182,6 @@ impl Paths {
             ),
         };
 
-        // Reads paths from `read` using delimiters specified by `input`
-        // and calls `for_each_path` on each one of them.
-        fn read(
-            read: impl std::io::Read,
-            input: &InputSource,
-            output: &mut Vec<PathBuf>,
-        ) -> anyhow::Result<()> {
-            let mut reader = std::io::BufReader::new(read);
-            match input {
-                InputSource::LineTerminated(_) => {
-                    reader.for_byte_line(|line| {
-                        if line.contains(&0u8) {
-                            return Err(std::io::Error::other(format!(
-                                "{}: file contains a NUL byte, \
-                                 did you intend to use --in0 instead of --in?",
-                                input
-                            )));
-                        }
-                        let s = ByteSlice::to_path(line).map_err(|err| {
-                            std::io::Error::other(format!(
-                                "{}: {}",
-                                input, err
-                            ))
-                        })?;
-                        output.push(s.into());
-                        Ok(true)
-                    })?
-                }
-                InputSource::NulTerminated(_) => {
-                    reader.for_byte_record(0, |record| {
-                        let s = ByteSlice::to_path(record).map_err(|err| {
-                            std::io::Error::other(format!(
-                                "{}: {}",
-                                input, err
-                            ))
-                        })?;
-                        output.push(s.into());
-                        Ok(true)
-                    })?
-                }
-                InputSource::PositionalArgument(_) => unreachable!(
-                    "the positional argument case has already been handled"
-                ),
-            };
-            Ok(())
-        }
-
         if input.is_stdin() {
             anyhow::ensure!(
                 !state.stdin_consumed,
@@ -1233,14 +1190,57 @@ impl Paths {
             );
             let stdin = std::io::stdin();
             let locked = stdin.lock();
-            read(locked, input, output)?;
+            Self::push_paths_from_input_or_related_reader(
+                locked, input, output,
+            )?;
             state.stdin_consumed = true;
         } else {
             let file = std::fs::File::open(path).map_err(|err| {
                 std::io::Error::other(format!("{}: {}", input, err))
             })?;
-            read(file, input, output)?;
+            Self::push_paths_from_input_or_related_reader(
+                file, input, output,
+            )?;
         }
+        Ok(())
+    }
+
+    fn push_paths_from_input_or_related_reader(
+        read: impl std::io::Read,
+        input: &InputSource,
+        output: &mut Vec<PathBuf>,
+    ) -> anyhow::Result<()> {
+        let mut reader = std::io::BufReader::new(read);
+        match input {
+            InputSource::PositionalArgument(osarg) => {
+                output.push(PathBuf::from(osarg));
+            }
+            InputSource::LineTerminated(_) => {
+                reader.for_byte_line(|line| {
+                    if line.contains(&0u8) {
+                        return Err(std::io::Error::other(format!(
+                            "{}: file contains a NUL byte, \
+                             did you intend to use --in0 instead of --in?",
+                            input
+                        )));
+                    }
+                    let s = ByteSlice::to_path(line).map_err(|err| {
+                        std::io::Error::other(format!("{}: {}", input, err))
+                    })?;
+                    output.push(s.into());
+                    Ok(true)
+                })?
+            }
+            InputSource::NulTerminated(_) => {
+                reader.for_byte_record(0, |record| {
+                    let s = ByteSlice::to_path(record).map_err(|err| {
+                        std::io::Error::other(format!("{}: {}", input, err))
+                    })?;
+                    output.push(s.into());
+                    Ok(true)
+                })?
+            }
+        };
         Ok(())
     }
 }
