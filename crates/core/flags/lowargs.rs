@@ -4,7 +4,7 @@ Provides the definition of low level arguments from CLI flags.
 
 use std::{
     ffi::{OsStr, OsString},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use {
@@ -648,27 +648,37 @@ pub(crate) enum InputSource {
     NulTerminated(PathBuf),
 }
 
+impl InputSource {
+    pub(crate) fn is_stdin(&self) -> bool {
+        match self {
+            InputSource::PositionalArgument(osarg) => osarg == OsStr::new("-"),
+            InputSource::LineTerminated(path) => path == Path::new("-"),
+            InputSource::NulTerminated(path) => path == Path::new("-"),
+        }
+    }
+
+    pub(crate) fn flag(&self) -> Option<&str> {
+        match self {
+            InputSource::PositionalArgument(_) => None,
+            InputSource::LineTerminated(_) => Some("--in"),
+            InputSource::NulTerminated(_) => Some("--in0"),
+        }
+    }
+}
+
 impl std::fmt::Display for InputSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InputSource::PositionalArgument(osarg) => {
-                if osarg == OsStr::new("-") {
-                    write!(f, "stdin")
-                } else {
+        if self.is_stdin() {
+            write!(f, "stdin")
+        } else {
+            match self {
+                InputSource::PositionalArgument(osarg) => {
                     write!(f, "{}", osarg.to_string_lossy())
                 }
-            }
-            InputSource::LineTerminated(path) => {
-                if path == std::path::Path::new("-") {
-                    write!(f, "stdin")
-                } else {
+                InputSource::LineTerminated(path) => {
                     write!(f, "{}", path.display())
                 }
-            }
-            InputSource::NulTerminated(path) => {
-                if path == std::path::Path::new("-") {
-                    write!(f, "stdin")
-                } else {
+                InputSource::NulTerminated(path) => {
                     write!(f, "{}", path.display())
                 }
             }

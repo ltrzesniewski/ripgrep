@@ -1156,14 +1156,13 @@ impl Paths {
         // Handle positional arguments separately, as these have
         // a different logic than the one from the flags.
         if let InputSource::PositionalArgument(osarg) = input {
-            let path = PathBuf::from(osarg);
-            if state.stdin_consumed && path == Path::new("-") {
+            if state.stdin_consumed && input.is_stdin() {
                 anyhow::bail!(
                     "error: attempted to read patterns \
                      from stdin while also searching stdin",
                 );
             }
-            output.push(path);
+            output.push(PathBuf::from(osarg));
             return Ok(());
         }
 
@@ -1171,9 +1170,9 @@ impl Paths {
         // - Text or binary files: LF/CRLF or NUL terminators
         // - Files or stdin: needs to handle `stdin_consumed`
 
-        let (path, flag) = match input {
-            InputSource::LineTerminated(path) => (path, "--in"),
-            InputSource::NulTerminated(path) => (path, "--in0"),
+        let path = match input {
+            InputSource::LineTerminated(path) => path,
+            InputSource::NulTerminated(path) => path,
             InputSource::PositionalArgument(_) => unreachable!(
                 "the positional argument case has already been handled"
             ),
@@ -1226,11 +1225,11 @@ impl Paths {
             Ok(())
         }
 
-        if path == Path::new("-") {
+        if input.is_stdin() {
             anyhow::ensure!(
                 !state.stdin_consumed,
-                "error reading {flag} from stdin: stdin \
-                 has already been consumed"
+                "error reading {} from stdin: stdin has already been consumed",
+                input.flag().unwrap_or("input")
             );
             let stdin = std::io::stdin();
             let locked = stdin.lock();
