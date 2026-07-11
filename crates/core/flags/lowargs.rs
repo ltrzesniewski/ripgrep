@@ -34,7 +34,6 @@ pub(crate) struct LowArgs {
     // Essential arguments.
     pub(crate) special: Option<SpecialMode>,
     pub(crate) mode: Mode,
-    pub(crate) positional: Vec<OsString>,
     pub(crate) inputs: Vec<InputSource>,
     pub(crate) patterns: Vec<PatternSource>,
     // Everything else, sorted lexicographically.
@@ -641,6 +640,8 @@ pub(crate) enum MmapMode {
 /// Represents a source of input paths to be searched.
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum InputSource {
+    /// A positional argument on the command line.
+    PositionalArgument(OsString),
     /// A text file with newline-terminated paths. Comes from the `--in` flag.
     LineTerminated(PathBuf),
     /// A binary file with NUL-terminated paths. Comes from the `--in0` flag.

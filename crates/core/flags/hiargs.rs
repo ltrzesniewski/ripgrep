@@ -995,11 +995,19 @@ impl Patterns {
         // If we got nothing from -e/--regexp and -f/--file, then the first
         // positional is a pattern.
         if low.patterns.is_empty() {
-            anyhow::ensure!(
-                !low.positional.is_empty(),
-                "ripgrep requires at least one pattern to execute a search"
-            );
-            let ospat = low.positional.remove(0);
+            let Some(ospat) = low
+                .inputs
+                .iter()
+                .position(|i| matches!(i, InputSource::PositionalArgument(_)))
+                .and_then(|i| match low.inputs.remove(i) {
+                    InputSource::PositionalArgument(pattern) => Some(pattern),
+                    _ => None,
+                })
+            else {
+                anyhow::bail!(
+                    "ripgrep requires at least one pattern to execute a search"
+                );
+            };
             let Ok(pat) = ospat.into_string() else {
                 anyhow::bail!("pattern given is not valid UTF-8")
             };
@@ -1081,19 +1089,9 @@ impl Paths {
         // assume that all remaining positional arguments are intended to be
         // file paths.
 
-        let mut paths = Vec::with_capacity(low.positional.len());
+        let mut paths = Vec::with_capacity(low.inputs.len());
         for input in low.inputs.drain(..) {
             Self::read_from_input(state, &input, &mut paths)?
-        }
-        for osarg in low.positional.drain(..) {
-            let path = PathBuf::from(osarg);
-            if state.stdin_consumed && path == Path::new("-") {
-                anyhow::bail!(
-                    "error: attempted to read patterns or input file paths \
-                     from stdin while also searching stdin",
-                );
-            }
-            paths.push(path);
         }
         log::debug!("number of paths given to search: {}", paths.len());
         if !paths.is_empty() {
@@ -1144,8 +1142,9 @@ impl Paths {
         self.paths.len() == 1 && self.paths[0] == Path::new("-")
     }
 
-    /// Reads the content of the `input` source specified through
-    /// an `--in` or `--in0` flag and adds its content to `output`.
+    /// Interprets `input` and adds its content to `output`.
+    /// `input` may be a positional argument or a source specified through
+    /// an `--in` or `--in0` flag.
     ///
     /// The goal is to reuse existing input file sets and to
     /// enable usage of chained ripgrep calls, such as
@@ -1155,6 +1154,19 @@ impl Paths {
         input: &InputSource,
         output: &mut Vec<PathBuf>,
     ) -> anyhow::Result<()> {
+        // We first try to handle positional arguments, as these are passed as-is.
+        if let InputSource::PositionalArgument(osarg) = input {
+            let path = PathBuf::from(osarg);
+            if state.stdin_consumed && path == Path::new("-") {
+                anyhow::bail!(
+                    "error: attempted to read patterns or input file paths \
+                     from stdin while also searching stdin",
+                );
+            }
+            output.push(path);
+            return Ok(());
+        }
+
         // We need to handle a combination of the following:
         // - Text or binary files: LF/CRLF or NUL separators
         // - Files or stdin: needs to handle `stdin_consumed`
@@ -1163,6 +1175,7 @@ impl Paths {
         let (path, flag) = match input {
             InputSource::LineTerminated(path) => (path, "--in"),
             InputSource::NulTerminated(path) => (path, "--in0"),
+            InputSource::PositionalArgument(_) => unreachable!(),
         };
 
         // Reads paths from `read` using delimiters specified by `input`
@@ -1193,6 +1206,7 @@ impl Paths {
                         Ok(true)
                     })?
                 }
+                InputSource::PositionalArgument(_) => unreachable!(),
             };
             Ok(())
         }
