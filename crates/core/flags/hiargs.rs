@@ -1091,7 +1091,7 @@ impl Paths {
 
         let mut paths = Vec::with_capacity(low.inputs.len());
         for input in low.inputs.drain(..) {
-            Self::read_from_input(state, &input, &mut paths)?
+            Self::add_paths_from_input(state, &input, &mut paths)?
         }
         log::debug!("number of paths given to search: {}", paths.len());
         if !paths.is_empty() {
@@ -1143,23 +1143,23 @@ impl Paths {
     }
 
     /// Interprets `input` and adds its content to `output`.
-    /// `input` may be a positional argument or a source specified through
-    /// an `--in` or `--in0` flag.
     ///
-    /// The goal is to reuse existing input file sets and to
-    /// enable usage of chained ripgrep calls, such as
+    /// `input` may be a positional argument or a source specified through
+    /// an `--in` or `--in0` flag, whose goal is to reuse existing input file
+    /// sets and to enable usage of chained ripgrep calls, such as
     /// `rg foo -l0 | rg bar --in0=- -l0 | rg baz --in0=-`
-    fn read_from_input(
+    fn add_paths_from_input(
         state: &mut State,
         input: &InputSource,
         output: &mut Vec<PathBuf>,
     ) -> anyhow::Result<()> {
-        // We first try to handle positional arguments, as these are passed as-is.
+        // Handle positional arguments separately, as these have
+        // a different logic than the one from the flags.
         if let InputSource::PositionalArgument(osarg) = input {
             let path = PathBuf::from(osarg);
             if state.stdin_consumed && path == Path::new("-") {
                 anyhow::bail!(
-                    "error: attempted to read patterns or input file paths \
+                    "error: attempted to read patterns \
                      from stdin while also searching stdin",
                 );
             }
@@ -1168,13 +1168,15 @@ impl Paths {
         }
 
         // We need to handle a combination of the following:
-        // - Text or binary files: LF/CRLF or NUL separators
+        // - Text or binary files: LF/CRLF or NUL terminators
         // - Files or stdin: needs to handle `stdin_consumed`
 
         let (path, flag) = match input {
             InputSource::LineTerminated(path) => (path, "--in"),
             InputSource::NulTerminated(path) => (path, "--in0"),
-            InputSource::PositionalArgument(_) => unreachable!(),
+            InputSource::PositionalArgument(_) => unreachable!(
+                "the positional argument case has already been handled"
+            ),
         };
 
         // Reads paths from `read` using delimiters specified by `input`
@@ -1205,7 +1207,9 @@ impl Paths {
                         Ok(true)
                     })?
                 }
-                InputSource::PositionalArgument(_) => unreachable!(),
+                InputSource::PositionalArgument(_) => unreachable!(
+                    "the positional argument case has already been handled"
+                ),
             };
             Ok(())
         }
