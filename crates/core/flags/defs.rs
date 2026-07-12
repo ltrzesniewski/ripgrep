@@ -3356,10 +3356,10 @@ were passed as positional arguments in the same order as they are
 in the file and relative to other positional arguments.
 .sp
 Newlines (both LF and CRLF) are not counted as part of the path.
-The rest of the path name is decoded as UTF-8 on Windows and taken as-is
-on Unix systems. Use the \flag{in0} flag to use \fBNUL\fP as terminator.
+The rest of the path name is taken as-is on Unix and decoded as UTF-8 on
+Windows. Use the \flag{in0} flag to use \fBNUL\fP as terminator.
 .sp
-When \fIINPUTFILE\fP is \fB-\fP, then \fBstdin\fP will be read for the files.
+When \fIINPUTFILE\fP is \fB-\fP, then the paths will be read from \fBstdin\fP.
 "
     }
     fn completion_type(&self) -> CompletionType {
@@ -3401,9 +3401,9 @@ When this flag is used, it behaves as if the file paths in the file provided
 were passed as positional arguments in the same order as they are
 in the file and relative to other positional arguments.
 .sp
-The path names are decoded as UTF-8 on Windows and taken as-is on Unix systems.
+The path names are taken as-is on Unix, and decoded as UTF-8 on Windows.
 .sp
-When \fIINPUTFILE\fP is \fB-\fP, then \fBstdin\fP will be read for the files.
+When \fIINPUTFILE\fP is \fB-\fP, then the paths will be read from \fBstdin\fP.
 "
     }
     fn completion_type(&self) -> CompletionType {

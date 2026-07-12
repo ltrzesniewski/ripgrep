@@ -1097,7 +1097,7 @@ impl Paths {
 
         let mut paths = Vec::with_capacity(low.inputs.len());
         for input in low.inputs.drain(..) {
-            Self::add_paths_from_input(state, input, &mut paths)?
+            Self::add_paths_from_input(state, input, &mut paths)?;
         }
         log::debug!("number of paths given to search: {}", paths.len());
         if !paths.is_empty() {
@@ -1152,7 +1152,7 @@ impl Paths {
     ///
     /// `input` may be a positional argument or a source specified through
     /// an `--in` or `--in0` flag, whose goal is to reuse existing input file
-    /// sets and to enable usage of chained ripgrep calls, such as
+    /// sets and to enable usage of chained ripgrep calls, such as:
     /// `rg foo -l0 | rg bar --in0=- -l0 | rg baz --in0=-`
     fn add_paths_from_input(
         state: &mut State,
@@ -1162,12 +1162,12 @@ impl Paths {
         // We need to handle a combination of the following:
         // - Positional arguments or input files
         // - In case of input files: with LF/CRLF or NUL terminators
-        // - Files or stdin: needs to handle `stdin_consumed`
+        // - Files or stdin: this needs to handle `stdin_consumed`
         match input {
             InputSource::PositionalArgument(_) => {
                 if state.stdin_consumed && input.is_stdin() {
                     anyhow::bail!(
-                        "error reading from stdin: stdin \
+                        "error: attempted to read from stdin: stdin \
                          has already been consumed",
                     );
                 }
@@ -1179,7 +1179,7 @@ impl Paths {
                 if input.is_stdin() {
                     anyhow::ensure!(
                         !state.stdin_consumed,
-                        "error reading {} from stdin: stdin \
+                        "error: attempted to read {} from stdin: stdin \
                          has already been consumed",
                         input.flag().unwrap_or("input")
                     );
