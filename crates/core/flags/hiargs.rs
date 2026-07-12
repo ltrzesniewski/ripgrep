@@ -1088,6 +1088,12 @@ impl Paths {
         // patterns have already been read from LowArgs. This lets us safely
         // assume that all remaining positional arguments are intended to be
         // file paths.
+        if state.stdin_consumed && low.inputs.iter().any(|i| i.is_stdin()) {
+            anyhow::bail!(
+                "error: attempted to read patterns or input file paths \
+                 from stdin while also searching stdin",
+            );
+        }
 
         let mut paths = Vec::with_capacity(low.inputs.len());
         for input in low.inputs.drain(..) {
