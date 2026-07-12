@@ -1091,7 +1091,7 @@ impl Paths {
 
         let mut paths = Vec::with_capacity(low.inputs.len());
         for input in low.inputs.drain(..) {
-            Self::add_paths_from_input(state, &input, &mut paths)?
+            Self::add_paths_from_input(state, input, &mut paths)?
         }
         log::debug!("number of paths given to search: {}", paths.len());
         if !paths.is_empty() {
@@ -1150,7 +1150,7 @@ impl Paths {
     /// `rg foo -l0 | rg bar --in0=- -l0 | rg baz --in0=-`
     fn add_paths_from_input(
         state: &mut State,
-        input: &InputSource,
+        input: InputSource,
         output: &mut Vec<PathBuf>,
     ) -> anyhow::Result<()> {
         // We need to handle a combination of the following:
@@ -1168,8 +1168,8 @@ impl Paths {
                 Self::add_paths_from_reader(std::io::empty(), input, output)?;
                 state.stdin_consumed = true;
             }
-            InputSource::LineTerminated(path)
-            | InputSource::NulTerminated(path) => {
+            InputSource::LineTerminated(ref path)
+            | InputSource::NulTerminated(ref path) => {
                 if input.is_stdin() {
                     anyhow::ensure!(
                         !state.stdin_consumed,
@@ -1198,7 +1198,7 @@ impl Paths {
     /// In the case of positional arguments, `read` is not relevant.
     fn add_paths_from_reader(
         read: impl std::io::Read,
-        input: &InputSource,
+        input: InputSource,
         output: &mut Vec<PathBuf>,
     ) -> anyhow::Result<()> {
         match input {
