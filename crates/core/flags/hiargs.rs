@@ -1212,7 +1212,7 @@ impl Paths {
             }
             InputSource::LineTerminated(_) => std::io::BufReader::new(read)
                 .for_byte_line(|line| {
-                    if line.contains(&0u8) {
+                    if line.contains(&b'\x00') {
                         return Err(std::io::Error::other(format!(
                             "{}: file contains a NUL byte, \
                              did you intend to use --in0 instead of --in?",
@@ -1226,7 +1226,7 @@ impl Paths {
                     Ok(true)
                 })?,
             InputSource::NulTerminated(_) => std::io::BufReader::new(read)
-                .for_byte_record(0, |record| {
+                .for_byte_record(b'\x00', |record| {
                     let s = ByteSlice::to_path(record).map_err(|err| {
                         std::io::Error::other(format!("{}: {}", input, err))
                     })?;

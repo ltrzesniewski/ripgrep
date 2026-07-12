@@ -92,62 +92,86 @@ rgtest!(in0_contains_non_existing_file, |dir: Dir, mut cmd: TestCommand| {
 // Tests for stdin consumption
 
 rgtest!(arg_stdin_consumed_by_in, |_dir: Dir, mut cmd: TestCommand| {
-    cmd.arg("match").arg("--in").arg("-").arg("-");
+    cmd.arg("match");
+    cmd.arg("--in").arg("-");
+    cmd.arg("-");
     cmd.assert_exit_code(2);
 });
 
 rgtest!(arg_stdin_consumed_by_in0, |_dir: Dir, mut cmd: TestCommand| {
-    cmd.arg("match").arg("--in0").arg("-").arg("-");
+    cmd.arg("match");
+    cmd.arg("--in0").arg("-");
+    cmd.arg("-");
     cmd.assert_exit_code(2);
 });
 
 rgtest!(arg_stdin_consumed_by_search, |_dir: Dir, mut cmd: TestCommand| {
-    cmd.arg("match").arg("-").arg("-");
+    cmd.arg("match");
+    cmd.arg("-");
+    cmd.arg("-");
     cmd.assert_exit_code(2);
 });
 
 rgtest!(arg_stdin_consumed_by_file, |_dir: Dir, mut cmd: TestCommand| {
-    cmd.arg("match").arg("--file").arg("-").arg("-");
+    cmd.arg("match");
+    cmd.arg("--file").arg("-");
+    cmd.arg("-");
     cmd.assert_exit_code(2);
 });
 
 rgtest!(in_stdin_consumed_by_in, |_dir: Dir, mut cmd: TestCommand| {
-    cmd.arg("match").arg("--in").arg("-").arg("--in").arg("-");
+    cmd.arg("match");
+    cmd.arg("--in").arg("-");
+    cmd.arg("--in").arg("-");
     cmd.assert_exit_code(2);
 });
 
 rgtest!(in_stdin_consumed_by_in0, |_dir: Dir, mut cmd: TestCommand| {
-    cmd.arg("match").arg("--in0").arg("-").arg("--in").arg("-");
+    cmd.arg("match");
+    cmd.arg("--in0").arg("-");
+    cmd.arg("--in").arg("-");
     cmd.assert_exit_code(2);
 });
 
 rgtest!(in_stdin_consumed_by_search, |_dir: Dir, mut cmd: TestCommand| {
-    cmd.arg("match").arg("-").arg("--in").arg("-");
+    cmd.arg("match");
+    cmd.arg("-");
+    cmd.arg("--in").arg("-");
     cmd.assert_exit_code(2);
 });
 
 rgtest!(in_stdin_consumed_by_file, |_dir: Dir, mut cmd: TestCommand| {
-    cmd.arg("match").arg("--file").arg("-").arg("--in").arg("-");
+    cmd.arg("match");
+    cmd.arg("--file").arg("-");
+    cmd.arg("--in").arg("-");
     cmd.assert_exit_code(2);
 });
 
 rgtest!(in0_stdin_consumed_by_in, |_dir: Dir, mut cmd: TestCommand| {
-    cmd.arg("match").arg("--in").arg("-").arg("--in0").arg("-");
+    cmd.arg("match");
+    cmd.arg("--in").arg("-");
+    cmd.arg("--in0").arg("-");
     cmd.assert_exit_code(2);
 });
 
 rgtest!(in0_stdin_consumed_by_in0, |_dir: Dir, mut cmd: TestCommand| {
-    cmd.arg("match").arg("--in0").arg("-").arg("--in0").arg("-");
+    cmd.arg("match");
+    cmd.arg("--in0").arg("-");
+    cmd.arg("--in0").arg("-");
     cmd.assert_exit_code(2);
 });
 
 rgtest!(in0_stdin_consumed_by_search, |_dir: Dir, mut cmd: TestCommand| {
-    cmd.arg("match").arg("-").arg("--in0").arg("-");
+    cmd.arg("match");
+    cmd.arg("-");
+    cmd.arg("--in0").arg("-");
     cmd.assert_exit_code(2);
 });
 
 rgtest!(in0_stdin_consumed_by_file, |_dir: Dir, mut cmd: TestCommand| {
-    cmd.arg("match").arg("--file").arg("-").arg("--in0").arg("-");
+    cmd.arg("match");
+    cmd.arg("--file").arg("-");
+    cmd.arg("--in0").arg("-");
     cmd.assert_exit_code(2);
 });
 
@@ -159,20 +183,19 @@ rgtest!(input_order, |dir: Dir, mut cmd: TestCommand| {
         dir.create(format!("file{}", i), "match");
     }
 
-    dir.create("inputA", "file6\nfile3\n");
-    dir.create("inputB", "file1\x00file8\x00");
+    dir.create("input-6-3", "file6\nfile3\n");
+    dir.create("input-1-8", "file1\x00file8\x00");
 
     cmd.arg("match").arg("--threads").arg("1").arg("-l");
 
     // Mingle the file order to exclude any potential sorting effect.
     cmd.arg("file7").arg("file5");
-    cmd.arg("--in").arg("inputA");
+    cmd.arg("--in").arg("input-6-3");
     cmd.arg("file2").arg("file4");
-    cmd.arg("--in0").arg("inputB");
+    cmd.arg("--in0").arg("input-1-8");
     cmd.arg("file10").arg("file9");
 
-    eqnice!(
-        "\
+    let expected = "\
 file7
 file5
 file6
@@ -183,7 +206,7 @@ file1
 file8
 file10
 file9
-",
-        &cmd.stdout()
-    );
+";
+
+    eqnice!(expected, &cmd.stdout());
 });
