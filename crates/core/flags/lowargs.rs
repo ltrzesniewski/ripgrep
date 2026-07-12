@@ -640,7 +640,7 @@ pub(crate) enum MmapMode {
 /// Represents a source of input paths to be searched.
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum InputSource {
-    /// A positional argument on the command line.
+    /// A positional argument on the command line. Provides a single path.
     PositionalArgument(OsString),
     /// A text file with newline-terminated paths. Comes from the `--in` flag.
     LineTerminated(PathBuf),
@@ -649,6 +649,7 @@ pub(crate) enum InputSource {
 }
 
 impl InputSource {
+    /// Returns true if this source reads from stdin.
     pub(crate) fn is_stdin(&self) -> bool {
         match self {
             InputSource::PositionalArgument(osarg) => osarg == OsStr::new("-"),
@@ -657,6 +658,7 @@ impl InputSource {
         }
     }
 
+    /// Returns the command-line flag used for this source.
     pub(crate) fn flag(&self) -> Option<&str> {
         match self {
             InputSource::PositionalArgument(_) => None,

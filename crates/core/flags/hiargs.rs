@@ -1155,7 +1155,7 @@ impl Paths {
     ) -> anyhow::Result<()> {
         // We need to handle a combination of the following:
         // - Positional arguments or input files
-        // - In case of input files: LF/CRLF or NUL terminators
+        // - In case of input files: with LF/CRLF or NUL terminators
         // - Files or stdin: needs to handle `stdin_consumed`
         match input {
             InputSource::PositionalArgument(_) => {
@@ -1165,7 +1165,7 @@ impl Paths {
                          has already been consumed",
                     );
                 }
-                Self::add_paths_from_reader(std::io::empty(), input, output)?;
+                Self::consume_input(std::io::empty(), input, output)?;
                 state.stdin_consumed = true;
             }
             InputSource::LineTerminated(ref path)
@@ -1179,24 +1179,23 @@ impl Paths {
                     );
                     let stdin = std::io::stdin();
                     let locked = stdin.lock();
-                    Self::add_paths_from_reader(locked, input, output)?;
+                    Self::consume_input(locked, input, output)?;
                     state.stdin_consumed = true;
                 } else {
                     let file = std::fs::File::open(path).map_err(|err| {
                         std::io::Error::other(format!("{}: {}", input, err))
                     })?;
-                    Self::add_paths_from_reader(file, input, output)?;
+                    Self::consume_input(file, input, output)?;
                 }
             }
         }
         Ok(())
     }
 
-    /// Add paths from `read` which is resolved from `input`,
-    /// and adds them to `output`.
+    /// Consumes `input` by adding paths from the associated `read` to `output`.
     ///
     /// In the case of positional arguments, `read` is not relevant.
-    fn add_paths_from_reader(
+    fn consume_input(
         read: impl std::io::Read,
         input: InputSource,
         output: &mut Vec<PathBuf>,
