@@ -1,6 +1,12 @@
+TBD
+===
+Unreleased changes. Release notes have not yet been written.
+
+
 15.2.0 (2026-07-15)
 ===================
-Unreleased changes. Release notes have not yet been written.
+This release fixes a number of bugs related to gitignore matching as well as
+some performance improvements in directory tree traversal.
 
 Platform support:
 
