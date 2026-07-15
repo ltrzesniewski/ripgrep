@@ -1,5 +1,5 @@
-TBD
-===
+15.2.0 (2026-07-15)
+===================
 Unreleased changes. Release notes have not yet been written.
 
 Platform support:
