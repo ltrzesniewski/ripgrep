@@ -184,7 +184,7 @@ dependencies = [
 
 [[package]]
 name = "grep-matcher"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "memchr",
  "regex",
