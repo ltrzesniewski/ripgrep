@@ -72,7 +72,7 @@ doing equivalent work:
 
 Now we'll move to searching on single large file. Here is a straight-up
 comparison between ripgrep, ugrep and GNU grep on a file cached in memory
-(~13GB, [`OpenSubtitles.raw.en.gz`](http://opus.nlpl.eu/download.php?f=OpenSubtitles/v2018/mono/OpenSubtitles.raw.en.gz), decompressed):
+(~13GB, [`OpenSubtitles.raw.en.gz`](https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2018/mono/en.txt.gz), decompressed):
 
 | Tool | Command | Line count | Time |
 | ---- | ------- | ---------- | ---- |
@@ -429,7 +429,7 @@ $ sudo xbps-install -Syv ripgrep
 
 If you're a **Rust programmer**, ripgrep can be installed with `cargo`.
 
-* Note that the minimum supported version of Rust for ripgrep is **1.85.0**,
+* Note that the minimum supported version of Rust for ripgrep is **1.96.0**,
   although ripgrep may work with older versions.
 * Note that the binary may be bigger than expected because it contains debug
   symbols. This is intentional. To remove debug symbols and therefore reduce
@@ -452,7 +452,7 @@ $ cargo binstall ripgrep
 
 ripgrep is written in Rust, so you'll need to grab a
 [Rust installation](https://www.rust-lang.org/) in order to compile it.
-ripgrep compiles with Rust 1.85.0 (stable) or newer. In general, ripgrep tracks
+ripgrep compiles with Rust 1.96.0 (stable) or newer. In general, ripgrep tracks
 the latest stable release of the Rust compiler.
 
 To build ripgrep:

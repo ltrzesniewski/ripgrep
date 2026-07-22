@@ -12,6 +12,9 @@ mod binary;
 // Tests related to most features in ripgrep. If you're adding something new
 // to ripgrep, tests should probably go in here.
 mod feature;
+// Tests ripgrep's indexing feature.
+#[cfg(feature = "unstable-index")]
+mod index;
 // Tests for ripgrep's handling of input sources.
 mod input;
 // Tests for ripgrep's JSON format.
